@@ -1,0 +1,379 @@
+/* Radon-222 Cloud Chamber Styles */
+
+* {
+    box-sizing: border-box;
+}
+
+body, html {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100dvh;
+    overflow: hidden;
+    background-color: #000000;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #FFFFFF;
+    font-size: 16px;
+}
+
+#live-chamber {
+    height: 100dvh;
+    width: 100vw;
+    background-color: #000000;
+    overflow: hidden;
+    position: relative;
+}
+
+#chamberCanvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    z-index: 1;
+    pointer-events: auto; /* Canvas needs to be clickable if necessary */
+}
+
+#simulation-viewport {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+}
+
+#control-console {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background-color: rgba(10, 10, 10, 0.6);
+    backdrop-filter: blur(4px);
+    padding: 0.5rem 1rem;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    pointer-events: auto;
+    width: auto;
+    height: auto;
+}
+
+#viewport-divider {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: linear-gradient(90deg, #8884d8, #82ca9d);
+    box-shadow: 0 0 8px #8884d8;
+    animation: neon-pulse 4s infinite alternate;
+    z-index: 5;
+}
+
+@keyframes neon-pulse {
+    from { box-shadow: 0 0 4px #8884d8; opacity: 0.6; }
+    to { box-shadow: 0 0 12px #82ca9d; opacity: 1; }
+}
+
+.console-controls {
+    display: flex;
+    flex-direction: column; /* Stack toggles vertically */
+    gap: 10px;
+    margin-bottom: 0;
+}
+
+/* New Shared View Class */
+.tab-view {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100dvh;
+    width: 100vw;
+    background-color: rgba(255, 255, 255, 0.98); /* Light mode background */
+    z-index: 50; /* Above canvas, below HUD */
+    padding: 1rem;
+    padding-bottom: 5.5rem; /* Space for pill */
+    display: none; /* Managed by JS */
+    pointer-events: auto;
+    box-sizing: border-box;
+    overflow-y: auto;
+    overflow-x: hidden; /* NO horizontal scroll */
+}
+
+/* Adjust card to fit the new view */
+.tab-view .card {
+    height: 100%;
+    max-height: calc(100dvh - 6.5rem);
+    background-color: transparent;
+    box-shadow: none;
+    border: none;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 0; /* Remove margin to fit viewport */
+}
+
+.tab-view .canvas-container {
+    flex-grow: 1;
+    width: 100%;
+    height: 100%;
+    aspect-ratio: auto; /* Remove fixed aspect ratio to fill available space */
+    min-height: 0;
+}
+
+.card {
+    background-color: #FFFFFF;
+    border-radius: 0; /* Flush to edges on mobile */
+    padding: 0;
+    overflow: hidden;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    width: 100%;
+    max-width: 900px; /* Perfect scaling on desktop */
+    margin: 0 auto 1.25rem auto;
+}
+
+.card-content {
+    padding: 20px;
+}
+
+.card h2 {
+    margin-top: 0;
+    color: #222222; /* Darker header */
+    font-size: 1.25rem; /* 20px */
+    margin-bottom: 0;
+}
+
+.card-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0;
+}
+
+.header-group {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    flex-grow: 1;
+}
+
+.industrial-toggle {
+    flex-direction: row;
+    margin: 0;
+    background: rgba(0,0,0,0.03);
+    padding: 4px 8px;
+    border-radius: 6px;
+    width: auto;
+}
+
+.industrial-toggle .switch-text {
+    color: #444;
+    font-size: 0.7rem;
+}
+
+.export-btn {
+    background: transparent;
+    border: 1px solid #333333; /* Dark border */
+    color: #333333; /* Dark text */
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.75rem; /* 12px */
+    padding: 0.25rem 0.625rem;
+    cursor: pointer;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.0625rem;
+    transition: all 0.2s ease;
+    white-space: nowrap; /* No wrap */
+    flex-shrink: 0; /* No shrink */
+}
+
+.export-btn:active {
+    animation: btn-flicker 0.1s infinite;
+    background-color: rgba(0, 0, 0, 0.05); /* Subtle dark flicker */
+}
+
+@keyframes btn-flicker {
+    0% { opacity: 1; }
+    50% { opacity: 0.7; }
+    100% { opacity: 1; }
+}
+
+.canvas-container {
+    width: 100%;
+    position: relative;
+    aspect-ratio: 8 / 5; /* Replaces padding-bottom: 62.5% */
+}
+
+.canvas-container canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.chart-description {
+    margin-top: 0;
+    font-size: 0.875rem; /* 14px */
+    color: #444444; /* Darker description */
+    line-height: 1.4;
+}
+
+/* Bottom Navigation Styles */
+#bottom-nav {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    height: 60px;
+    width: auto;
+    min-width: 200px;
+    background-color: rgba(26, 26, 26, 0.6);
+    backdrop-filter: blur(8px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 20px;
+    padding: 0 20px;
+    z-index: 100;
+    border-radius: 30px; /* Pill shape */
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    pointer-events: auto;
+}
+
+.nav-btn {
+    flex: 0 0 auto;
+    height: 40px;
+    width: 40px;
+    border-radius: 50%;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: none;
+    border: none;
+    color: #888888;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.nav-btn svg {
+    width: 20px;
+    height: 20px;
+}
+
+.nav-btn.active {
+    color: #FFFFFF;
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.nav-btn:hover:not(.active) {
+    color: #E0E0E0;
+    background-color: rgba(255, 255, 255, 0.02);
+}
+
+.toggle-container {
+    margin: 0;
+}
+
+.switch-label {
+    display: flex;
+    flex-direction: row; /* Align text and toggle horizontally */
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    font-size: 0.65rem; /* Smaller text */
+    gap: 0.5rem;
+    color: rgba(255, 255, 255, 0.7);
+    font-weight: 600;
+    width: 100%;
+}
+
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 32px; /* Scale down toggle */
+    height: 18px;
+}
+
+.switch input { 
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(255, 255, 255, 0.1);
+    transition: .3s;
+    border-radius: 34px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 14px;
+    width: 14px;
+    left: 2px;
+    bottom: 2px;
+    background-color: #ccc;
+    transition: .3s;
+    border-radius: 50%;
+}
+
+input:checked + .slider {
+    background-color: #8884d8; /* Alpha Purple */
+}
+
+#showBeta:checked + .slider {
+    background-color: #82ca9d; /* Beta Green */
+}
+
+#toggleBField:checked + .slider {
+    background-color: #00ffff; /* Cyan for B-Field */
+}
+
+input:checked + .slider:before {
+    transform: translateX(14px);
+    background-color: #fff;
+}
+
+/* Industrial B-Field Slider Styles */
+.bfield-slider {
+    background-color: rgba(0, 0, 0, 0.3) !important;
+    border: 1px solid #444 !important;
+}
+
+#toggleBField:checked + .bfield-slider,
+#toggleScatterMag:checked + .bfield-slider {
+    background-color: #008888 !important; /* Muted teal */
+    box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
+}
+
+#toggleBField:checked + .bfield-slider:before,
+#toggleScatterMag:checked + .bfield-slider:before {
+    background-color: #00ffff !important; /* Bright Cyan LED */
+    box-shadow: 0 0 15px #00ffff;
+}
+
+.bfield-slider:before {
+    background-color: #444;
+    border: 1px solid #222;
+}
+
+/* Distinct Label for HUD B-Field */
+#control-console .toggle-container:last-child .switch-text {
+    color: #00ffff;
+    text-shadow: 0 0 5px rgba(0, 255, 255, 0.5);
+}
