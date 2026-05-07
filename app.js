@@ -648,6 +648,8 @@
         };
 
         state.charts.scatter = new Chart(ctx, chartConfig);
+
+        refreshScatterData();
     }
 
     /**
@@ -757,20 +759,22 @@
                         borderColor: 'rgba(136, 132, 216, 1.0)',
                         backgroundColor: 'rgba(136, 132, 216, 0.2)',
                         
-                        // --- FORCE HIDE POINTS ---
+                        // --- THE HARD-DISABLE FOR POINTS ---
+                        pointStyle: false,         // Completely skips point geometry rendering
                         pointRadius: 0,
                         pointHoverRadius: 0,
+                        pointBorderWidth: 0,       // Prevents the border stroke from rendering at 5x scale
                         pointBorderColor: 'transparent',
                         pointBackgroundColor: 'transparent',
                         
                         // --- VERTICAL ERROR LINE ---
-                        errorBarColor: 'rgba(136, 132, 216, 0.4)', // 40% opacity to soften visual impact
+                        errorBarColor: 'rgba(136, 132, 216, 0.4)',
                         errorBarLineWidth: 1,
                         
                         // --- FORCE HIDE WHISKERS (CAPS) ---
                         errorBarWhiskerLineWidth: 0,
-                        errorBarWhiskerRatio: 0,             // Forces cap width to 0
-                        errorBarWhiskerColor: 'transparent', // Invisible fallback
+                        errorBarWhiskerRatio: 0,
+                        errorBarWhiskerColor: 'transparent',
                         
                         stepped: 'middle',
                         fill: true
@@ -781,8 +785,10 @@
                         borderColor: 'rgba(130, 202, 157, 1.0)',
                         backgroundColor: 'rgba(130, 202, 157, 0.2)',
                         
+                        pointStyle: false,
                         pointRadius: 0,
                         pointHoverRadius: 0,
+                        pointBorderWidth: 0,
                         pointBorderColor: 'transparent',
                         pointBackgroundColor: 'transparent',
                         
@@ -801,8 +807,10 @@
                         borderColor: 'rgba(200, 200, 200, 1.0)',
                         backgroundColor: 'rgba(200, 200, 200, 0.2)',
                         
+                        pointStyle: false,
                         pointRadius: 0,
                         pointHoverRadius: 0,
+                        pointBorderWidth: 0,
                         pointBorderColor: 'transparent',
                         pointBackgroundColor: 'transparent',
                         
@@ -825,6 +833,19 @@
                     duration: 150,
                     easing: 'easeOutQuart'
                 },
+
+                elements: {
+                    point: {
+                        radius: 0,
+                        hitRadius: 0,
+                        hoverRadius: 0
+                    }
+                },
+
+                
+
+
+                
                 scales: {
                     x: {
                         type: 'logarithmic',
@@ -1133,43 +1154,53 @@
         animationId = requestAnimationFrame(render);
     }
 
-
-
     /**
-     * Export a specific chart as a JPG image with a white background.
-     * @param {string} canvasId - The ID of the chart canvas.
+     * Export a chart as an ultra-high-resolution JPG for A1 poster printing.
+     * Overrides the live chart's pixel ratio temporarily to guarantee perfect layout fidelity.
+     * @param {string} chartKey - The state key of the chart (e.g., 'scatter', 'histogram').
      * @param {string} filename - The base filename for the export.
      */
-    window.exportChartJPG = function(canvasId, filename) {
-        const originalCanvas = document.getElementById(canvasId);
-        if (!originalCanvas) return;
+    window.exportHighResPrint = function(chartKey, filename) {
+        const chart = state.charts[chartKey];
+        if (!chart) return;
 
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = originalCanvas.width;
-        tempCanvas.height = originalCanvas.height;
-
-        const ctx = tempCanvas.getContext('2d');
+        // 1. Save original pixel ratio
+        const originalRatio = chart.options.devicePixelRatio || window.devicePixelRatio || 1;
         
-        // Fill white background
+        // 2. Force chart to render at 5x resolution (approx 5K width, perfect for A1 print)
+        chart.options.devicePixelRatio = 5;
+        chart.update('none'); // 'none' forces an instant, synchronous render without animations
+
+        // 3. Create a temporary canvas at the new ultra-high resolution
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = chart.canvas.width;
+        tempCanvas.height = chart.canvas.height;
+        const ctx = tempCanvas.getContext('2d');
+
+        // 4. Fill with solid white (This permanently fixes the black background issue)
         ctx.fillStyle = '#FFFFFF';
         ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
 
-        // Draw original transparent chart on top
-        ctx.drawImage(originalCanvas, 0, 0);
+        // 5. Draw the ultra-high-res chart on top of the solid white background
+        ctx.drawImage(chart.canvas, 0, 0);
 
-        // Convert to JPG data URL
+        // 6. Extract the pristine image data
         const dataUrl = tempCanvas.toDataURL('image/jpeg', 1.0);
-        
-        // Trigger download
+
+        // 7. Instantly restore the live chart back to normal screen resolution
+        chart.options.devicePixelRatio = originalRatio;
+        chart.update('none');
+
+        // 8. Trigger the browser download
         const link = document.createElement('a');
         link.href = dataUrl;
-        link.download = `${filename}_${new Date().getTime()}.jpg`;
+        link.download = `${filename}_A1_Print_${new Date().getTime()}.jpg`;
         link.click();
     };
 
-    /**
-     * Export raw particle metadata for scatter, histogram, and momentum analysis as CSV.
-     */
+
+
+    
     window.exportDataCSV = function() {
         const alpha = state.liveAlphaData.toArray();
         const beta = state.liveBetaData.toArray();
