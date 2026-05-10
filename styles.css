@@ -1,5 +1,16 @@
 /* Radon-222 Cloud Chamber Styles */
 
+:root {
+    --bg-base: #000;
+    --panel-bg: rgba(255, 255, 255, 0.05);
+    --panel-blur: blur(12px);
+    --panel-border: rgba(255, 255, 255, 0.1);
+    --accent: #00ffff;
+    --text-primary: #fff;
+    --text-secondary: rgba(255, 255, 255, 0.6);
+    --radius: 8px;
+}
+
 * {
     box-sizing: border-box;
 }
@@ -10,50 +21,45 @@ body, html {
     width: 100%;
     height: 100dvh;
     overflow: hidden;
-    background-color: #000000;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    color: #FFFFFF;
+    background-color: var(--bg-base);
+    font-family: 'Geist', sans-serif;
+    color: var(--text-primary);
     font-size: 16px;
 }
 
 #live-chamber {
     height: 100dvh;
     width: 100vw;
-    background-color: #000000;
+    background-color: var(--bg-base);
     overflow: hidden;
     position: relative;
 }
 
-#chamberCanvas {
-    position: absolute;
+#simulation-viewport {
+    position: fixed;
     top: 0;
     left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 0;
+}
+
+#chamberCanvas {
     width: 100%;
     height: 100%;
     display: block;
-    z-index: 1;
-    pointer-events: auto; /* Canvas needs to be clickable if necessary */
-}
-
-#simulation-viewport {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    z-index: 1;
 }
 
 #control-console {
     position: absolute;
     top: 20px;
     right: 20px;
-    background-color: rgba(10, 10, 10, 0.6);
-    backdrop-filter: blur(4px);
+    background: var(--panel-bg);
+    backdrop-filter: var(--panel-blur);
     padding: 0.5rem 1rem;
-    border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius);
+    border: 1px solid var(--panel-border);
+    box-shadow: none;
     z-index: 100;
     display: flex;
     flex-direction: column;
@@ -67,16 +73,11 @@ body, html {
     bottom: 0;
     left: 0;
     width: 100%;
-    height: 2px;
-    background: linear-gradient(90deg, #8884d8, #82ca9d);
-    box-shadow: 0 0 8px #8884d8;
-    animation: neon-pulse 4s infinite alternate;
+    height: 1px;
+    background: var(--accent);
+    box-shadow: 0 0 10px var(--accent);
+    opacity: 0.2;
     z-index: 5;
-}
-
-@keyframes neon-pulse {
-    from { box-shadow: 0 0 4px #8884d8; opacity: 0.6; }
-    to { box-shadow: 0 0 12px #82ca9d; opacity: 1; }
 }
 
 .console-controls {
@@ -88,20 +89,61 @@ body, html {
 
 /* New Shared View Class */
 .tab-view {
-    position: absolute;
+    position: fixed;
     top: 0;
     left: 0;
-    height: 100dvh;
-    width: 100vw;
-    background-color: rgba(255, 255, 255, 0.98); /* Light mode background */
-    z-index: 50; /* Above canvas, below HUD */
-    padding: 1rem;
-    padding-bottom: 5.5rem; /* Space for pill */
-    display: none; /* Managed by JS */
+    width: 100%;
+    height: 100%;
+    z-index: 10;
+    display: none; /* Controlled by JS active class */
+    padding-top: 20px;
+    background-color: #ffffff; /* Light mode background */
     pointer-events: auto;
     box-sizing: border-box;
     overflow-y: auto;
     overflow-x: hidden; /* NO horizontal scroll */
+}
+
+/* Light mode overrides for tab-view */
+.tab-view h2 {
+    color: #111111;
+}
+
+.tab-view p, .tab-view .chart-description {
+    color: #555555;
+}
+
+.tab-view .glass-toggle {
+    background: #f0f0f0;
+}
+
+.tab-view .glass-toggle .switch-text {
+    color: #333333;
+}
+
+.tab-view .export-btn {
+    background: transparent;
+    color: #333333;
+    border: 1px solid #cccccc;
+    min-height: 36px;
+    border-radius: 6px;
+    font-weight: 500;
+}
+
+.tab-view .export-btn:hover {
+    border-color: #111111;
+    color: #111111;
+    background: #f9f9f9;
+}
+
+.tab-view .slider {
+    background-color: #dddddd;
+    border-color: #cccccc;
+}
+
+.tab-view .slider:before {
+    background-color: #ffffff;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
 }
 
 /* Adjust card to fit the new view */
@@ -125,11 +167,13 @@ body, html {
 }
 
 .card {
-    background-color: #FFFFFF;
-    border-radius: 0; /* Flush to edges on mobile */
+    background: var(--panel-bg);
+    backdrop-filter: var(--panel-blur);
+    border-radius: var(--radius);
+    border: 1px solid var(--panel-border);
+    box-shadow: none;
     padding: 0;
     overflow: hidden;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     width: 100%;
     max-width: 900px; /* Perfect scaling on desktop */
     margin: 0 auto 1.25rem auto;
@@ -140,10 +184,10 @@ body, html {
 }
 
 .card h2 {
-    margin-top: 0;
-    color: #222222; /* Darker header */
-    font-size: 1.25rem; /* 20px */
-    margin-bottom: 0;
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
 }
 
 .card-header-row {
@@ -161,34 +205,39 @@ body, html {
     flex-grow: 1;
 }
 
-.industrial-toggle {
+.glass-toggle {
     flex-direction: row;
     margin: 0;
-    background: rgba(0,0,0,0.03);
+    background: rgba(255,255,255,0.05);
     padding: 4px 8px;
     border-radius: 6px;
     width: auto;
 }
 
-.industrial-toggle .switch-text {
-    color: #444;
+.glass-toggle .switch-text {
+    color: var(--text-secondary);
     font-size: 0.7rem;
 }
 
 .export-btn {
-    background: transparent;
-    border: 1px solid #333333; /* Dark border */
-    color: #333333; /* Dark text */
-    font-family: 'Courier New', Courier, monospace;
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    color: var(--text-primary);
+    font-family: inherit;
     font-size: 0.75rem; /* 12px */
-    padding: 0.25rem 0.625rem;
+    padding: 0.5rem 1rem;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     cursor: pointer;
-    border-radius: 4px;
+    border-radius: var(--radius);
     text-transform: uppercase;
     letter-spacing: 0.0625rem;
     transition: all 0.2s ease;
     white-space: nowrap; /* No wrap */
     flex-shrink: 0; /* No shrink */
+    box-shadow: none !important;
 }
 
 .export-btn:active {
@@ -206,6 +255,7 @@ body, html {
     width: 100%;
     position: relative;
     aspect-ratio: 8 / 5; /* Replaces padding-bottom: 62.5% */
+    background-color: #ffffff; /* Light mode for graphs */
 }
 
 .canvas-container canvas {
@@ -217,10 +267,10 @@ body, html {
     display: block;
 }
 
-.chart-description {
+p, .chart-description {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
     margin-top: 0;
-    font-size: 0.875rem; /* 14px */
-    color: #444444; /* Darker description */
     line-height: 1.4;
 }
 
@@ -230,36 +280,113 @@ body, html {
     bottom: 20px;
     left: 50%;
     transform: translateX(-50%);
-    height: 60px;
+    height: 64px;
     width: auto;
     min-width: 200px;
-    background-color: rgba(26, 26, 26, 0.6);
-    backdrop-filter: blur(8px);
+    background: rgba(0, 0, 0, 0.85); /* Force dark mode dock */
+    backdrop-filter: var(--panel-blur);
     display: flex;
     justify-content: center;
     align-items: center;
     gap: 20px;
     padding: 0 20px;
     z-index: 100;
-    border-radius: 30px; /* Pill shape */
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 32px; /* Pill shape */
+    border: 1px solid rgba(255, 255, 255, 0.15);
     pointer-events: auto;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5); /* Lift off light bg */
 }
 
 .nav-btn {
     flex: 0 0 auto;
-    height: 40px;
-    width: 40px;
-    border-radius: 50%;
-    padding: 0;
+    height: 48px;
+    width: 48px;
+    border-radius: var(--radius);
+    padding: 12px;
     display: flex;
     justify-content: center;
     align-items: center;
-    background: none;
+    background: rgba(255, 255, 255, 0.1);
     border: none;
-    color: #888888;
+    color: var(--text-primary);
     cursor: pointer;
     transition: all 0.3s ease;
+    box-shadow: none !important;
+}
+
+/* --- Flexbox Container --- */
+.minimal-toggle-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;               /* Locks the switch tightly to the text */
+    cursor: pointer;
+    user-select: none;
+    width: fit-content;      /* Prevents the container from stretching */
+    background: transparent; /* Enforces the floating aesthetic */
+    padding: 0;              /* Removes bulky box padding */
+}
+
+/* --- Typography --- */
+.toggle-label {
+    color: #A0A0A0;          /* Dimmed grey for inactive/neutral state */
+    font-size: 14px;
+    font-weight: 400;        /* Regular weight */
+    letter-spacing: 0.5px;   /* Slight tracking for a technical look */
+}
+
+/* --- Toggle Switch Mechanics --- */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 36px;
+    height: 20px;
+}
+
+/* Hide the default HTML checkbox */
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+}
+
+/* --- The Track (Inactive) --- */
+.toggle-slider {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: transparent;
+    border: 1px solid #333333; /* Dark grey wireframe blends into black */
+    border-radius: 20px;       /* Consistent 4px/pill radius */
+    transition: 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+/* --- The Knob (Inactive) --- */
+.toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 12px;
+    width: 12px;
+    left: 3px;
+    bottom: 3px;
+    background-color: #A0A0A0; /* Matches the text colour */
+    border-radius: 50%;
+    transition: 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+/* --- Active State (ON) --- */
+.toggle-switch input:checked + .toggle-slider {
+    background-color: #111111; /* Dark track for light mode */
+    border-color: #111111;
+}
+
+.toggle-switch input:checked + .toggle-slider:before {
+    transform: translateX(16px);
+    background-color: #FFFFFF; /* White knob */
+}
+
+/* Optional: Highlight text when active */
+.minimal-toggle-container:has(input:checked) .toggle-label {
+    color: #111111; /* High contrast text on light background */
 }
 
 .nav-btn svg {
@@ -268,13 +395,13 @@ body, html {
 }
 
 .nav-btn.active {
-    color: #FFFFFF;
+    color: var(--accent);
     background-color: rgba(255, 255, 255, 0.05);
 }
 
 .nav-btn:hover:not(.active) {
-    color: #E0E0E0;
-    background-color: rgba(255, 255, 255, 0.02);
+    color: var(--text-primary);
+    background-color: rgba(255, 255, 255, 0.15);
 }
 
 .toggle-container {
@@ -327,53 +454,51 @@ body, html {
     width: 14px;
     left: 2px;
     bottom: 2px;
-    background-color: #ccc;
+    background-color: var(--text-secondary);
     transition: .3s;
     border-radius: 50%;
 }
 
 input:checked + .slider {
-    background-color: #8884d8; /* Alpha Purple */
-}
-
-#showBeta:checked + .slider {
-    background-color: #82ca9d; /* Beta Green */
-}
-
-#toggleBField:checked + .slider {
-    background-color: #00ffff; /* Cyan for B-Field */
+    background-color: var(--accent) !important;
 }
 
 input:checked + .slider:before {
     transform: translateX(14px);
-    background-color: #fff;
+    background-color: var(--text-primary);
 }
 
-/* Industrial B-Field Slider Styles */
-.bfield-slider {
-    background-color: rgba(0, 0, 0, 0.3) !important;
-    border: 1px solid #444 !important;
-}
-
-#toggleBField:checked + .bfield-slider,
-#toggleScatterMag:checked + .bfield-slider {
-    background-color: #008888 !important; /* Muted teal */
-    box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
-}
-
-#toggleBField:checked + .bfield-slider:before,
-#toggleScatterMag:checked + .bfield-slider:before {
-    background-color: #00ffff !important; /* Bright Cyan LED */
-    box-shadow: 0 0 15px #00ffff;
-}
-
+/* Minimalistic B-Field Slider Styles */
 .bfield-slider:before {
-    background-color: #444;
-    border: 1px solid #222;
+    background-color: var(--text-primary);
+    border: none;
 }
 
 /* Distinct Label for HUD B-Field */
 #control-console .toggle-container:last-child .switch-text {
-    color: #00ffff;
-    text-shadow: 0 0 5px rgba(0, 255, 255, 0.5);
+    color: var(--accent);
+}
+
+.glass-dock {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 10px 20px;
+    display: flex;
+    gap: 20px;
+    align-items: center;
+}
+
+.event-feed-container {
+    font-family: 'Geist Mono', monospace;
+    font-size: 10px;
+    color: var(--accent);
+    max-height: 80px;
+    overflow-y: hidden;
+    width: 200px;
 }

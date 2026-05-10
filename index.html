@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Radon-222 Cloud Chamber</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-error-bars@4"></script>
@@ -17,7 +20,7 @@
             <div id="viewport-divider"></div>
         </div>
 
-        <div id="control-console">
+        <div id="control-console" class="glass-dock">
             <div class="console-controls">
                 <div class="toggle-container">
                     <label class="switch-label">
@@ -41,12 +44,13 @@
                     <label class="switch-label">
                         <span class="switch-text">B-Field (1.0T)</span>
                         <div class="switch">
-                            <input type="checkbox" id="toggleBField">
+                            <input type="checkbox" id="toggleBFieldSim">
                             <span class="slider bfield-slider"></span>
                         </div>
                     </label>
                 </div>
             </div>
+            <div id="event-feed" class="event-feed-container"></div>
         </div>
     </div>
 
@@ -54,16 +58,16 @@
         <div class="card">
             <div class="card-content">
                 <div class="card-header-row">
-                    <div class="header-group">
-                        <h2>Morphological Scatter Analysis</h2>
-                        <label class="switch-label industrial-toggle">
-                            <span class="switch-text">B-Field Filter</span>
-                            <div class="switch">
-                                <input type="checkbox" id="toggleScatterMag" onchange="setScatterMag(this.checked)">
-                                <span class="slider bfield-slider"></span>
-                            </div>
-                        </label>
-                    </div>
+                        <div class="header-group">
+                            <h2>Morphological Scatter Analysis</h2>
+                            <label class="minimal-toggle-container">
+                                <span class="toggle-label">B-Field Filter</span>
+                                <div class="toggle-switch">
+                                    <input type="checkbox" id="toggleBFieldScatter">
+                                    <span class="toggle-slider"></span>
+                                </div>
+                            </label>
+                        </div>
                     <button class="export-btn" onclick="exportHighResPrint('scatter', 'radon_scatter')">[ EXPORT 4K PRINT ]</button>
                 </div>
             </div>

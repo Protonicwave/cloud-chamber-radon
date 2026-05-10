@@ -251,39 +251,41 @@
         }
 
         /**
-         * Draw the particle track segment.
+         * Draw the particle track segment using a Core and Halo technique.
          */
         draw(ctx) {
             if (this.distanceTravelled === 0) return;
 
+            // 1. Prepare the path
             ctx.beginPath();
             ctx.moveTo(this.prevX, this.prevY);
             ctx.lineTo(this.x, this.y);
-            
-            let drawWidth = this.lineWidth;
-            let drawAlpha = (this.type === 'alpha') ? 1.0 : 0.5;
-            
-            if (this.type === 'alpha') {
-                const progress = this.distanceTravelled / this.lifespan;
-                if (progress > 0.8) {
-                    const factor = (progress - 0.8) / 0.2;
-                    // Increase lineWidth by up to 2.5x (original + 1.5 * factor)
-                    drawWidth = this.lineWidth * (1 + factor * 1.5);
-                }
-            }
-
-            ctx.strokeStyle = (this.type === 'alpha') ? `rgba(255, 255, 255, ${drawAlpha})` : this.colour;
-            ctx.lineWidth = drawWidth;
             ctx.lineCap = 'round';
             
-            // Apply global vapour glow for the current track
-            ctx.shadowBlur = 5;
-            ctx.shadowColor = '#FFFFFF';
-            
-            ctx.stroke();
-            
-            // Reset shadow to avoid affecting other drawing operations
-            ctx.shadowBlur = 0;
+            // 2. Render based on particle type
+            if (this.type === 'alpha') {
+                // HALO PASS: Wide, highly transparent outer mist
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)'; 
+                ctx.lineWidth = this.lineWidth * 2.5; 
+                ctx.stroke();
+
+                // CORE PASS: Narrow, solid white high-energy centre
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+                ctx.lineWidth = this.lineWidth * 0.6; 
+                ctx.stroke();
+                
+            } else if (this.type === 'beta') {
+                // Beta particles are faint and wispy
+                ctx.strokeStyle = 'rgba(200, 255, 220, 0.4)'; // Slight icy-green tint for contrast
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+                
+            } else {
+                // Cosmic Muons remain sharp and faint
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                ctx.lineWidth = 1.0;
+                ctx.stroke();
+            }
         }
     }
 
@@ -574,20 +576,20 @@
                     {
                         label: 'Alpha Particles',
                         data: [],
-                        backgroundColor: 'rgba(136, 132, 216, 0.4)',
-                        pointRadius: 2
+                        backgroundColor: 'rgba(0, 150, 200, 0.6)',
+                        pointRadius: 1.5
                     },
                     {
                         label: 'Beta Particles',
                         data: [],
-                        backgroundColor: 'rgba(130, 202, 157, 0.4)',
-                        pointRadius: 2
+                        backgroundColor: 'rgba(100, 100, 100, 0.3)',
+                        pointRadius: 1.5
                     },
                     {
                         label: 'Cosmic Muons',
                         data: [],
-                        backgroundColor: 'rgba(200, 200, 200, 0.5)',
-                        pointRadius: 2
+                        backgroundColor: 'rgba(150, 150, 150, 0.2)',
+                        pointRadius: 1.5
                     }
                 ]
             },
@@ -622,7 +624,7 @@
                         },
                         min: 0,
                         max: 30,
-                        grid: { color: 'rgba(0, 0, 0, 0.1)' },
+                        grid: { color: 'rgba(0, 0, 0, 0.05)', drawTicks: false },
                         border: { display: false }
                     },
                     y: {
@@ -638,7 +640,7 @@
                         },
                         min: 0.5,
                         max: 1.05,
-                        grid: { color: 'rgba(0, 0, 0, 0.1)' },
+                        grid: { color: 'rgba(0, 0, 0, 0.05)', drawTicks: false },
                         border: { display: false }
                     }
                 },
@@ -672,9 +674,9 @@
                         label: 'Alpha (MeV)',
                         grouped: false,
                         data: mapBins(new Array(10).fill(0)),
-                        backgroundColor: 'rgba(136, 132, 216, 0.6)',
+                        backgroundColor: 'rgba(0, 150, 200, 0.6)',
                         errorBarLineWidth: 2,
-                        errorBarColor: 'rgba(136, 132, 216, 1.0)',
+                        errorBarColor: 'rgba(0, 150, 200, 0.8)',
                         barPercentage: 1.0,
                         categoryPercentage: 1.0
                     },
@@ -682,9 +684,9 @@
                         label: 'Beta (MeV)',
                         grouped: false,
                         data: mapBins(new Array(10).fill(0)),
-                        backgroundColor: 'rgba(130, 202, 157, 0.6)',
+                        backgroundColor: 'rgba(100, 100, 100, 0.3)',
                         errorBarLineWidth: 2,
-                        errorBarColor: 'rgba(130, 202, 157, 1.0)',
+                        errorBarColor: 'rgba(100, 100, 100, 0.5)',
                         barPercentage: 1.0,
                         categoryPercentage: 1.0
                     }
@@ -709,7 +711,7 @@
                             font: { size: 14 },
                             color: '#444444'
                         },
-                        grid: { color: 'rgba(0, 0, 0, 0.1)' },
+                        grid: { color: 'rgba(0, 0, 0, 0.05)', drawTicks: false },
                         border: { display: false }
                     },
                     y: {
@@ -723,7 +725,7 @@
                             font: { size: 14 },
                             color: '#444444'
                         },
-                        grid: { color: 'rgba(0, 0, 0, 0.1)' },
+                        grid: { color: 'rgba(0, 0, 0, 0.05)', drawTicks: false },
                         border: { display: false }
                     }
                 },
@@ -757,7 +759,10 @@
                         label: 'Alpha (MeV/c)',
                         data: [],
                         borderColor: 'rgba(136, 132, 216, 1.0)',
-                        backgroundColor: 'rgba(136, 132, 216, 0.2)',
+                        backgroundColor: 'rgba(0, 150, 200, 0.6)',
+                        borderWidth: 0,
+                        barPercentage: 1.0,
+                        categoryPercentage: 1.0,
                         
                         // --- THE HARD-DISABLE FOR POINTS ---
                         pointStyle: false,         // Completely skips point geometry rendering
@@ -783,7 +788,10 @@
                         label: 'Beta (MeV/c)',
                         data: [],
                         borderColor: 'rgba(130, 202, 157, 1.0)',
-                        backgroundColor: 'rgba(130, 202, 157, 0.2)',
+                        backgroundColor: 'rgba(100, 100, 100, 0.3)',
+                        borderWidth: 0,
+                        barPercentage: 1.0,
+                        categoryPercentage: 1.0,
                         
                         pointStyle: false,
                         pointRadius: 0,
@@ -805,7 +813,10 @@
                         label: 'Cosmic Muons (MeV/c)',
                         data: [],
                         borderColor: 'rgba(200, 200, 200, 1.0)',
-                        backgroundColor: 'rgba(200, 200, 200, 0.2)',
+                        backgroundColor: 'rgba(150, 150, 150, 0.2)',
+                        borderWidth: 0,
+                        barPercentage: 1.0,
+                        categoryPercentage: 1.0,
                         
                         pointStyle: false,
                         pointRadius: 0,
@@ -1238,6 +1249,7 @@
      * Initialise the application.
      */
     function initialise() {
+        Chart.defaults.font.family = "'Geist', sans-serif";
         initialiseCanvas();
         
         window.addEventListener('resize', handleResize);
@@ -1248,10 +1260,17 @@
         btnEnergy.addEventListener('click', () => switchView('energy'));
         btnMomentum.addEventListener('click', () => switchView('momentum'));
         
-        const bFieldToggle = document.getElementById('toggleBField');
-        if(bFieldToggle) {
-             bFieldToggle.addEventListener('change', (e) => {
+        const bFieldToggleSim = document.getElementById('toggleBFieldSim');
+        if(bFieldToggleSim) {
+             bFieldToggleSim.addEventListener('change', (e) => {
                  state.magneticField = e.target.checked;
+             });
+        }
+
+        const bFieldToggleScatter = document.getElementById('toggleBFieldScatter');
+        if(bFieldToggleScatter) {
+             bFieldToggleScatter.addEventListener('change', (e) => {
+                 window.setScatterMag(e.target.checked);
              });
         }
         
