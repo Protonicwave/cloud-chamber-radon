@@ -54,11 +54,11 @@ body, html {
     position: absolute;
     top: 20px;
     right: 20px;
-    background: var(--panel-bg);
-    backdrop-filter: var(--panel-blur);
+    background: transparent;
+    backdrop-filter: none;
     padding: 0.5rem 1rem;
     border-radius: var(--radius);
-    border: 1px solid var(--panel-border);
+    border: none;
     box-shadow: none;
     z-index: 100;
     display: flex;
@@ -501,4 +501,5 @@ input:checked + .slider:before {
     max-height: 80px;
     overflow-y: hidden;
     width: 200px;
+    display: none;
 }

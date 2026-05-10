@@ -168,6 +168,10 @@
             this.type = type;
             this.active = true;
             this.distanceTravelled = 0;
+            this.history = []; // For schematic segments
+            if (this.type === 'beta') {
+                this.dashPattern = [2, 2];
+            }
 
             // Task 2: Sync visuals with metadata
             if (metadata) {
@@ -220,7 +224,12 @@
          * Update particle position and lifespan.
          */
         update() {
-            if (!this.active) return;
+            if (!this.active && Math.random() < 0.02) {
+                this.history.shift();
+                return;
+            } else if (!this.active) {
+                return;
+            }
 
             // Save previous position for line drawing
             this.prevX = this.x;
@@ -244,47 +253,59 @@
             this.y += Math.sin(this.angle) * this.speed;
 
             this.distanceTravelled += this.speed;
+            this.history.push({x: this.x, y: this.y, prevX: this.prevX, prevY: this.prevY});
 
             if (this.distanceTravelled >= this.lifespan) {
                 this.active = false;
             }
         }
 
+        drawVector(ctx) {
+            const headSize = 4;
+            const angle = this.angle;
+            ctx.beginPath();
+            ctx.moveTo(this.x, this.y);
+            ctx.lineTo(this.x - headSize * Math.cos(angle - Math.PI/6), this.y - headSize * Math.sin(angle - Math.PI/6));
+            ctx.moveTo(this.x, this.y);
+            ctx.lineTo(this.x - headSize * Math.cos(angle + Math.PI/6), this.y - headSize * Math.sin(angle + Math.PI/6));
+            ctx.strokeStyle = this.type === 'alpha' ? 'cyan' : 'white';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+
         /**
-         * Draw the particle track segment using a Core and Halo technique.
+         * Draw the particle track segment using a Schematic technique.
          */
         draw(ctx) {
-            if (this.distanceTravelled === 0) return;
+            if (this.history.length === 0) return;
 
-            // 1. Prepare the path
+            ctx.save();
             ctx.beginPath();
-            ctx.moveTo(this.prevX, this.prevY);
-            ctx.lineTo(this.x, this.y);
-            ctx.lineCap = 'round';
             
-            // 2. Render based on particle type
+            // Draw all segments in history
+            const first = this.history[0];
+            ctx.moveTo(first.prevX, first.prevY);
+            for (let i = 0; i < this.history.length; i++) {
+                ctx.lineTo(this.history[i].x, this.history[i].y);
+            }
+            
             if (this.type === 'alpha') {
-                // HALO PASS: Wide, highly transparent outer mist
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)'; 
-                ctx.lineWidth = this.lineWidth * 2.5; 
-                ctx.stroke();
-
-                // CORE PASS: Narrow, solid white high-energy centre
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
-                ctx.lineWidth = this.lineWidth * 0.6; 
-                ctx.stroke();
-                
+                ctx.strokeStyle = 'rgba(255, 255, 255, 1.0)';
+                ctx.lineWidth = 2.5;
             } else if (this.type === 'beta') {
-                // Beta particles are faint and wispy
-                ctx.strokeStyle = 'rgba(200, 255, 220, 0.4)'; // Slight icy-green tint for contrast
-                ctx.lineWidth = 1.5;
-                ctx.stroke();
-                
-            } else {
-                // Cosmic Muons remain sharp and faint
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                ctx.strokeStyle = 'rgba(200, 255, 220, 0.8)';
                 ctx.lineWidth = 1.0;
-                ctx.stroke();
+                ctx.setLineDash(this.dashPattern || [2, 2]);
+            } else {
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+                ctx.lineWidth = 1.0;
+            }
+            
+            ctx.stroke();
+            ctx.restore();
+            
+            if (this.active) {
+                this.drawVector(ctx);
             }
         }
     }
@@ -554,8 +575,8 @@
             };
 
             // Draw for Dataset 0 (Alpha) and Dataset 1 (Beta)
-            drawEllipseForDataset(0, 'rgba(136, 132, 216, 1.0)');
-            drawEllipseForDataset(1, 'rgba(130, 202, 157, 1.0)');
+            drawEllipseForDataset(0, 'rgba(0, 150, 200, 1.0)'); // Deep vibrant teal/blue for Alpha
+            drawEllipseForDataset(1, 'rgba(100, 100, 100, 1.0)'); // Mid-grey for Beta
         }
     };
 
@@ -870,7 +891,8 @@
                             color: '#333333'
                         },
                         ticks: { color: '#444444' },
-                        grid: { display: false }
+                        grid: { color: 'rgba(0, 0, 0, 0.05)', drawTicks: false },
+                        border: { display: false }
                     },
                     y: {
                         title: { 
@@ -880,7 +902,7 @@
                             color: '#333333'
                         },
                         ticks: { color: '#444444' },
-                        grid: { color: 'rgba(0, 0, 0, 0.1)' },
+                        grid: { color: 'rgba(0, 0, 0, 0.05)', drawTicks: false },
                         border: { display: false }
                     }
                 },
@@ -1063,6 +1085,16 @@
         return { x: startX, y: startY, length: len, tortuosity: tort, energy: eng, angle: angle };
     }
 
+    function logEvent(type, energy) {
+        const feed = document.getElementById('event-feed');
+        if (!feed) return;
+        const entry = document.createElement('div');
+        const time = new Date().toLocaleTimeString('en-GB', { hour12: false });
+        entry.textContent = `[${time}] ${type.toUpperCase()} - ${energy.toFixed(1)} MeV`;
+        feed.prepend(entry);
+        if (feed.children.length > 8) feed.removeChild(feed.lastChild);
+    }
+
     /**
      * Generate new particle events based on the defined decay rate and ratio.
      * Task 3: The Radon Spawner Engine.
@@ -1102,6 +1134,7 @@
                 
                 // Synchronise Visuals with Data Generation
                 logParticleMetadata(type, startX, startY, metadata);
+                logEvent(type, metadata.energy);
 
                 // Update verification counters
                 totalSpawned++;
