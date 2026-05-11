@@ -92,6 +92,7 @@
         width: 0,
         height: 0,
         activeView: 'live', // 'live', 'morphology', or 'energy'
+        isTransitioning: false,
         buffers: {
             density: null,
             densityCtx: null,
@@ -460,61 +461,67 @@
      * Switch between Live Chamber and Analytics Dashboard.
      */
     function switchView(view) {
-        if (state.activeView === view) return;
-        state.activeView = view;
+        if (state.activeView === view || state.isTransitioning) return;
 
-        // Hide all views first
-        liveView.style.display = 'none';
-        morphologyView.style.display = 'none';
-        energyView.style.display = 'none';
-        momentumView.style.display = 'none';
+        state.isTransitioning = true;
 
-        // Deactivate all buttons
-        btnLive.classList.remove('active');
-        btnMorphology.classList.remove('active');
-        btnEnergy.classList.remove('active');
-        btnMomentum.classList.remove('active');
+        const viewMap = {
+            'live': { el: liveView, btn: btnLive, display: 'flex' },
+            'morphology': { el: morphologyView, btn: btnMorphology, display: 'block' },
+            'energy': { el: energyView, btn: btnEnergy, display: 'block' },
+            'momentum': { el: momentumView, btn: btnMomentum, display: 'block' }
+        };
 
-        if (view === 'live') {
-            liveView.style.display = 'flex';
-            btnLive.classList.add('active');
-            
-            // Wait for browser to apply 'display: flex' and compute layout
-            // before re-initialising the canvas dimensions.
-            requestAnimationFrame(() => {
-                initialiseCanvas();
-            });
-        } else if (view === 'morphology') {
-            morphologyView.style.display = 'block';
-            btnMorphology.classList.add('active');
-            
-            if (!state.charts.scatter) {
-                renderScatter();
-            } else {
-                state.charts.scatter.resize();
-            }
-            state.dashboard.dirty = true;
-        } else if (view === 'energy') {
-            energyView.style.display = 'block';
-            btnEnergy.classList.add('active');
-            
-            if (!state.charts.histogram) {
-                renderHistogram();
-            } else {
-                state.charts.histogram.resize();
-            }
-            state.dashboard.dirty = true;
-        } else if (view === 'momentum') {
-            momentumView.style.display = 'block';
-            btnMomentum.classList.add('active');
-            
-            if (!state.charts.momentum) {
-                renderMomentumChart();
-            } else {
-                state.charts.momentum.resize();
-            }
-            state.dashboard.dirty = true;
+        const currentView = viewMap[state.activeView];
+        const nextView = viewMap[view];
+
+        // 1. Mark current view as exiting
+        if (currentView && currentView.el) {
+            currentView.el.classList.add('exiting');
         }
+
+        // 2. Update state and button UI immediately
+        state.activeView = view;
+        [btnLive, btnMorphology, btnEnergy, btnMomentum].forEach(btn => btn.classList.remove('active'));
+        if (nextView.btn) nextView.btn.classList.add('active');
+
+        // 3. Middle of transition: Swap displays
+        setTimeout(() => {
+            if (currentView && currentView.el) {
+                currentView.el.style.display = 'none';
+                currentView.el.classList.remove('exiting');
+            }
+
+            if (nextView && nextView.el) {
+                nextView.el.style.display = nextView.display;
+                nextView.el.classList.add('entering');
+            }
+        }, 300);
+
+        // 4. End of transition: Cleanup and render
+        setTimeout(() => {
+            if (nextView && nextView.el) {
+                nextView.el.classList.remove('entering');
+            }
+
+            // Trigger specific view initialisation
+            if (view === 'live') {
+                initialiseCanvas();
+            } else if (view === 'morphology') {
+                if (!state.charts.scatter) renderScatter();
+                else state.charts.scatter.resize();
+                state.dashboard.dirty = true;
+            } else if (view === 'energy') {
+                if (!state.charts.histogram) renderHistogram();
+                else state.charts.histogram.resize();
+                state.dashboard.dirty = true;
+            } else if (view === 'momentum') {
+                if (!state.charts.momentum) renderMomentumChart();
+                else state.charts.momentum.resize();
+                state.dashboard.dirty = true;
+            }
+            state.isTransitioning = false;
+        }, 400);
     }
 
     const confidenceEllipsePlugin = {
@@ -626,8 +633,8 @@
                     legend: { 
                         position: 'top',
                         labels: { 
-                            font: { size: 16, weight: '600' },
-                            color: '#222222'
+                            font: { family: "'Geist', sans-serif", weight: '500', size: 14 },
+                            color: '#52525b'
                         }
                     }
                 },
@@ -636,32 +643,32 @@
                         title: { 
                             display: true, 
                             text: 'Track Length (pixels)',
-                            font: { size: 18, weight: 'bold' },
-                            color: '#333333'
+                            font: { family: "'Geist', sans-serif", weight: '500', size: 14 },
+                            color: '#52525b'
                         },
                         ticks: { 
-                            font: { size: 14 },
-                            color: '#444444'
+                            font: { family: "'Geist', sans-serif", weight: '500', size: 13 },
+                            color: '#71717a'
                         },
                         min: 0,
                         max: 30,
-                        grid: { color: 'rgba(0, 0, 0, 0.05)', drawTicks: false },
+                        grid: { display: false },
                         border: { display: false }
                     },
                     y: {
                         title: { 
                             display: true, 
                             text: 'Tortuosity Index',
-                            font: { size: 18, weight: 'bold' },
-                            color: '#333333'
+                            font: { family: "'Geist', sans-serif", weight: '500', size: 14 },
+                            color: '#52525b'
                         },
                         ticks: { 
-                            font: { size: 14 },
-                            color: '#444444'
+                            font: { family: "'Geist', sans-serif", weight: '500', size: 13 },
+                            color: '#71717a'
                         },
                         min: 0.5,
                         max: 1.05,
-                        grid: { color: 'rgba(0, 0, 0, 0.05)', drawTicks: false },
+                        grid: { color: 'rgba(0, 0, 0, 0.06)', borderDash: [4, 4], drawTicks: false },
                         border: { display: false }
                     }
                 },
@@ -725,36 +732,36 @@
                         title: { 
                             display: true, 
                             text: 'Energy Range (MeV)',
-                            font: { size: 18, weight: 'bold' },
-                            color: '#333333'
+                            font: { family: "'Geist', sans-serif", weight: '500', size: 14 },
+                            color: '#52525b'
                         },
                         ticks: { 
-                            font: { size: 14 },
-                            color: '#444444'
+                            font: { family: "'Geist', sans-serif", weight: '500', size: 13 },
+                            color: '#71717a'
                         },
-                        grid: { color: 'rgba(0, 0, 0, 0.05)', drawTicks: false },
+                        grid: { display: false },
                         border: { display: false }
                     },
                     y: {
                         title: { 
                             display: true, 
                             text: 'Event Frequency',
-                            font: { size: 18, weight: 'bold' },
-                            color: '#333333'
+                            font: { family: "'Geist', sans-serif", weight: '500', size: 14 },
+                            color: '#52525b'
                         },
                         ticks: { 
-                            font: { size: 14 },
-                            color: '#444444'
+                            font: { family: "'Geist', sans-serif", weight: '500', size: 13 },
+                            color: '#71717a'
                         },
-                        grid: { color: 'rgba(0, 0, 0, 0.05)', drawTicks: false },
+                        grid: { color: 'rgba(0, 0, 0, 0.06)', borderDash: [4, 4], drawTicks: false },
                         border: { display: false }
                     }
                 },
                 plugins: {
                     legend: {
                         labels: { 
-                            font: { size: 16, weight: '600' },
-                            color: '#222222'
+                            font: { family: "'Geist', sans-serif", weight: '500', size: 14 },
+                            color: '#52525b'
                         }
                     }
                 }
@@ -779,7 +786,7 @@
                     {
                         label: 'Alpha (MeV/c)',
                         data: [],
-                        borderColor: 'rgba(136, 132, 216, 1.0)',
+                        borderColor: 'rgba(0, 150, 200, 1.0)',
                         backgroundColor: 'rgba(0, 150, 200, 0.6)',
                         borderWidth: 0,
                         barPercentage: 1.0,
@@ -794,7 +801,7 @@
                         pointBackgroundColor: 'transparent',
                         
                         // --- VERTICAL ERROR LINE ---
-                        errorBarColor: 'rgba(136, 132, 216, 0.4)',
+                        errorBarColor: 'rgba(0, 150, 200, 0.4)',
                         errorBarLineWidth: 1,
                         
                         // --- FORCE HIDE WHISKERS (CAPS) ---
@@ -808,7 +815,7 @@
                     {
                         label: 'Beta (MeV/c)',
                         data: [],
-                        borderColor: 'rgba(130, 202, 157, 1.0)',
+                        borderColor: 'rgba(100, 100, 100, 1.0)',
                         backgroundColor: 'rgba(100, 100, 100, 0.3)',
                         borderWidth: 0,
                         barPercentage: 1.0,
@@ -821,7 +828,7 @@
                         pointBorderColor: 'transparent',
                         pointBackgroundColor: 'transparent',
                         
-                        errorBarColor: 'rgba(130, 202, 157, 0.4)',
+                        errorBarColor: 'rgba(100, 100, 100, 0.4)',
                         errorBarLineWidth: 1,
                         errorBarWhiskerLineWidth: 0,
                         errorBarWhiskerRatio: 0,
@@ -833,7 +840,7 @@
                     {
                         label: 'Cosmic Muons (MeV/c)',
                         data: [],
-                        borderColor: 'rgba(200, 200, 200, 1.0)',
+                        borderColor: 'rgba(150, 150, 150, 1.0)',
                         backgroundColor: 'rgba(150, 150, 150, 0.2)',
                         borderWidth: 0,
                         barPercentage: 1.0,
@@ -846,7 +853,7 @@
                         pointBorderColor: 'transparent',
                         pointBackgroundColor: 'transparent',
                         
-                        errorBarColor: 'rgba(200, 200, 200, 0.4)',
+                        errorBarColor: 'rgba(150, 150, 150, 0.4)',
                         errorBarLineWidth: 1,
                         errorBarWhiskerLineWidth: 0,
                         errorBarWhiskerRatio: 0,
@@ -887,27 +894,38 @@
                         title: { 
                             display: true, 
                             text: 'Momentum (MeV/c)',
-                            font: { size: 18, weight: 'bold' },
-                            color: '#333333'
+                            font: { family: "'Geist', sans-serif", weight: '500', size: 14 },
+                            color: '#52525b'
                         },
-                        ticks: { color: '#444444' },
-                        grid: { color: 'rgba(0, 0, 0, 0.05)', drawTicks: false },
+                        ticks: { 
+                            font: { family: "'Geist', sans-serif", weight: '500', size: 13 },
+                            color: '#71717a'
+                        },
+                        grid: { display: false },
                         border: { display: false }
                     },
                     y: {
                         title: { 
                             display: true, 
                             text: 'Event Frequency',
-                            font: { size: 18, weight: 'bold' },
-                            color: '#333333'
+                            font: { family: "'Geist', sans-serif", weight: '500', size: 14 },
+                            color: '#52525b'
                         },
-                        ticks: { color: '#444444' },
-                        grid: { color: 'rgba(0, 0, 0, 0.05)', drawTicks: false },
+                        ticks: { 
+                            font: { family: "'Geist', sans-serif", weight: '500', size: 13 },
+                            color: '#71717a'
+                        },
+                        grid: { color: 'rgba(0, 0, 0, 0.06)', borderDash: [4, 4], drawTicks: false },
                         border: { display: false }
                     }
                 },
                 plugins: {
-                    legend: { labels: { color: '#222222' } }
+                    legend: { 
+                        labels: { 
+                            font: { family: "'Geist', sans-serif", weight: '500', size: 14 },
+                            color: '#52525b'
+                        } 
+                    }
                 }
             }
         };
@@ -1085,16 +1103,6 @@
         return { x: startX, y: startY, length: len, tortuosity: tort, energy: eng, angle: angle };
     }
 
-    function logEvent(type, energy) {
-        const feed = document.getElementById('event-feed');
-        if (!feed) return;
-        const entry = document.createElement('div');
-        const time = new Date().toLocaleTimeString('en-GB', { hour12: false });
-        entry.textContent = `[${time}] ${type.toUpperCase()} - ${energy.toFixed(1)} MeV`;
-        feed.prepend(entry);
-        if (feed.children.length > 8) feed.removeChild(feed.lastChild);
-    }
-
     /**
      * Generate new particle events based on the defined decay rate and ratio.
      * Task 3: The Radon Spawner Engine.
@@ -1134,7 +1142,6 @@
                 
                 // Synchronise Visuals with Data Generation
                 logParticleMetadata(type, startX, startY, metadata);
-                logEvent(type, metadata.energy);
 
                 // Update verification counters
                 totalSpawned++;

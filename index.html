@@ -14,46 +14,47 @@
     <script src="https://cdn.jsdelivr.net/npm/jstat@latest/dist/jstat.min.js"></script>
 </head>
 <body>
-    <div id="live-chamber">
+    <div id="live-chamber" class="view-container">
         <div id="simulation-viewport">
             <canvas id="chamberCanvas"></canvas>
         </div>
 
-        <div id="control-console" class="glass-dock">
-            <div class="console-controls">
-                <div class="toggle-container">
-                    <label class="switch-label">
-                        <span class="switch-text">Alphas</span>
-                        <div class="switch">
+        <div id="live-controls-dock">
+            <div class="dock-controls">
+                <div class="glass-toggle">
+                    <label class="glass-switch-label">
+                        <span class="glass-switch-text">Alphas</span>
+                        <div class="glass-switch">
                             <input type="checkbox" id="showAlpha" checked>
-                            <span class="slider"></span>
+                            <span class="glass-slider"></span>
                         </div>
                     </label>
                 </div>
-                <div class="toggle-container">
-                    <label class="switch-label">
-                        <span class="switch-text">Betas</span>
-                        <div class="switch">
+                <div class="dock-divider"></div>
+                <div class="glass-toggle">
+                    <label class="glass-switch-label">
+                        <span class="glass-switch-text">Betas</span>
+                        <div class="glass-switch">
                             <input type="checkbox" id="showBeta" checked>
-                            <span class="slider"></span>
+                            <span class="glass-slider"></span>
                         </div>
                     </label>
                 </div>
-                <div class="toggle-container">
-                    <label class="switch-label">
-                        <span class="switch-text">B-Field (1.0T)</span>
-                        <div class="switch">
+                <div class="dock-divider"></div>
+                <div class="glass-toggle">
+                    <label class="glass-switch-label">
+                        <span class="glass-switch-text">B-Field (1.0T)</span>
+                        <div class="glass-switch">
                             <input type="checkbox" id="toggleBFieldSim">
-                            <span class="slider bfield-slider"></span>
+                            <span class="glass-slider bfield-slider"></span>
                         </div>
                     </label>
                 </div>
             </div>
-            <div id="event-feed" class="event-feed-container"></div>
         </div>
     </div>
 
-    <div id="morphology-view" class="tab-view">
+    <div id="morphology-view" class="tab-view view-container">
         <div class="card">
             <div class="card-content">
                 <div class="card-header-row">
@@ -79,7 +80,7 @@
         </div>
     </div>
 
-    <div id="energy-view" class="tab-view">
+    <div id="energy-view" class="tab-view view-container">
         <div class="card">
             <div class="card-content">
                 <div class="card-header-row">
@@ -96,7 +97,7 @@
         </div>
     </div>
 
-    <div id="momentum-view" class="tab-view">
+    <div id="momentum-view" class="tab-view view-container">
         <div class="card">
             <div class="card-content">
                 <div class="card-header-row">

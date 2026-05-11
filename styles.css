@@ -42,6 +42,8 @@ body, html {
     width: 100vw;
     height: 100vh;
     z-index: 0;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 100px, black calc(100% - 100px), transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0%, black 100px, black calc(100% - 100px), transparent 100%);
 }
 
 #chamberCanvas {
@@ -50,23 +52,6 @@ body, html {
     display: block;
 }
 
-#control-console {
-    position: absolute;
-    top: 20px;
-    right: 20px;
-    background: transparent;
-    backdrop-filter: none;
-    padding: 0.5rem 1rem;
-    border-radius: var(--radius);
-    border: none;
-    box-shadow: none;
-    z-index: 100;
-    display: flex;
-    flex-direction: column;
-    pointer-events: auto;
-    width: auto;
-    height: auto;
-}
 
 #viewport-divider {
     position: absolute;
@@ -80,12 +65,6 @@ body, html {
     z-index: 5;
 }
 
-.console-controls {
-    display: flex;
-    flex-direction: column; /* Stack toggles vertically */
-    gap: 10px;
-    margin-bottom: 0;
-}
 
 /* New Shared View Class */
 .tab-view {
@@ -136,15 +115,6 @@ body, html {
     background: #f9f9f9;
 }
 
-.tab-view .slider {
-    background-color: #dddddd;
-    border-color: #cccccc;
-}
-
-.tab-view .slider:before {
-    background-color: #ffffff;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-}
 
 /* Adjust card to fit the new view */
 .tab-view .card {
@@ -404,102 +374,183 @@ p, .chart-description {
     background-color: rgba(255, 255, 255, 0.15);
 }
 
-.toggle-container {
-    margin: 0;
-}
-
-.switch-label {
-    display: flex;
-    flex-direction: row; /* Align text and toggle horizontally */
-    justify-content: space-between;
-    align-items: center;
-    cursor: pointer;
-    font-size: 0.65rem; /* Smaller text */
-    gap: 0.5rem;
-    color: rgba(255, 255, 255, 0.7);
-    font-weight: 600;
-    width: 100%;
-}
-
-.switch {
-    position: relative;
-    display: inline-block;
-    width: 32px; /* Scale down toggle */
-    height: 18px;
-}
-
-.switch input { 
-    opacity: 0;
-    width: 0;
-    height: 0;
-}
-
-.slider {
-    position: absolute;
-    cursor: pointer;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: rgba(255, 255, 255, 0.1);
-    transition: .3s;
-    border-radius: 34px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.slider:before {
-    position: absolute;
-    content: "";
-    height: 14px;
-    width: 14px;
-    left: 2px;
-    bottom: 2px;
-    background-color: var(--text-secondary);
-    transition: .3s;
-    border-radius: 50%;
-}
-
-input:checked + .slider {
-    background-color: var(--accent) !important;
-}
-
-input:checked + .slider:before {
-    transform: translateX(14px);
-    background-color: var(--text-primary);
-}
-
 /* Minimalistic B-Field Slider Styles */
 .bfield-slider:before {
     background-color: var(--text-primary);
     border: none;
 }
 
-/* Distinct Label for HUD B-Field */
-#control-console .toggle-container:last-child .switch-text {
-    color: var(--accent);
-}
-
-.glass-dock {
+#live-controls-dock {
     position: absolute;
-    bottom: 20px;
+    top: 20px;
     left: 50%;
     transform: translateX(-50%);
-    background: rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 12px;
-    padding: 10px 20px;
+    z-index: 100;
+    display: none;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 40px;
+    padding: 6px 16px;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: auto;
+    max-width: calc(100% - 40px);
+    box-sizing: border-box;
+}
+
+body:has(#btn-live.active) #live-controls-dock {
     display: flex;
-    gap: 20px;
+}
+
+#live-controls-dock:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.dock-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.dock-divider {
+    width: 1px;
+    height: 16px;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.glass-toggle {
+    display: flex;
     align-items: center;
 }
 
-.event-feed-container {
-    font-family: 'Geist Mono', monospace;
-    font-size: 10px;
-    color: var(--accent);
-    max-height: 80px;
-    overflow-y: hidden;
-    width: 200px;
-    display: none;
+.glass-switch-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.glass-switch-text {
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    transition: color 0.2s ease;
+}
+
+.glass-switch {
+    position: relative;
+    display: inline-block;
+    width: 32px;
+    height: 18px;
+}
+
+.glass-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+}
+
+.glass-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-slider:before {
+    position: absolute;
+    content: "";
+    height: 12px;
+    width: 12px;
+    left: 2px;
+    bottom: 2px;
+    background-color: rgba(255, 255, 255, 0.4);
+    border-radius: 50%;
+    transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-switch input:checked + .glass-slider {
+    background: rgba(0, 255, 255, 0.1);
+    border-color: var(--accent);
+    box-shadow: 0 0 12px rgba(0, 255, 255, 0.15);
+}
+
+.glass-switch input:checked + .glass-slider:before {
+    transform: translateX(14px);
+    background-color: var(--text-primary);
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.4);
+}
+
+.glass-switch-label:has(input:checked) .glass-switch-text {
+    color: var(--text-primary);
+}
+
+@media (max-width: 600px) {
+    #live-controls-dock {
+        top: 10px;
+        padding: 8px 12px;
+        border-radius: 24px;
+    }
+    .dock-controls {
+        gap: 8px;
+    }
+    .glass-switch-text {
+        font-size: 0.55rem;
+    }
+}
+
+/* View Transitions */
+.view-container {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    overflow: hidden;
+}
+
+.entering {
+    animation: viewFadeIn 400ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    z-index: 2;
+}
+
+.exiting {
+    animation: viewFadeOut 300ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    z-index: 1;
+    pointer-events: none;
+}
+
+@keyframes viewFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(1.02);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes viewFadeOut {
+    from {
+        opacity: 1;
+        transform: scale(1);
+    }
+    to {
+        opacity: 0;
+        transform: scale(0.98);
+    }
 }
