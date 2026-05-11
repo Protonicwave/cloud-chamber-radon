@@ -91,6 +91,8 @@
         showBeta: betaToggle.checked,
         width: 0,
         height: 0,
+        spawnMinX: 0,
+        spawnMaxX: 0,
         activeView: 'live', // 'live', 'morphology', or 'energy'
         isTransitioning: false,
         buffers: {
@@ -269,7 +271,11 @@
             ctx.lineTo(this.x - headSize * Math.cos(angle - Math.PI/6), this.y - headSize * Math.sin(angle - Math.PI/6));
             ctx.moveTo(this.x, this.y);
             ctx.lineTo(this.x - headSize * Math.cos(angle + Math.PI/6), this.y - headSize * Math.sin(angle + Math.PI/6));
-            ctx.strokeStyle = this.type === 'alpha' ? 'cyan' : 'white';
+            
+            if (this.type === 'alpha') ctx.strokeStyle = '#0096c8';
+            else if (this.type === 'beta') ctx.strokeStyle = '#a1a1aa';
+            else ctx.strokeStyle = '#71717a';
+            
             ctx.lineWidth = 1;
             ctx.stroke();
         }
@@ -291,14 +297,14 @@
             }
             
             if (this.type === 'alpha') {
-                ctx.strokeStyle = 'rgba(255, 255, 255, 1.0)';
+                ctx.strokeStyle = '#0096c8';
                 ctx.lineWidth = 2.5;
             } else if (this.type === 'beta') {
-                ctx.strokeStyle = 'rgba(200, 255, 220, 0.8)';
+                ctx.strokeStyle = '#a1a1aa';
                 ctx.lineWidth = 1.0;
                 ctx.setLineDash(this.dashPattern || [2, 2]);
             } else {
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+                ctx.strokeStyle = '#71717a';
                 ctx.lineWidth = 1.0;
             }
             
@@ -346,11 +352,14 @@
         state.charts.scatter.data.datasets[2].data = state.liveMuonData.toArray().map(p => ({
             x: p.length, y: getObserved(p, 'muon')
         }));
+        state.charts.scatter.data.datasets[0].label = `Alpha Particles [${state.liveAlphaData.size}]`;
+        state.charts.scatter.data.datasets[1].label = `Beta Particles [${state.liveBetaData.size}]`;
+        state.charts.scatter.data.datasets[2].label = `Cosmic Muons [${state.liveMuonData.size}]`;
         
         // Update Y axis min
         state.charts.scatter.options.scales.y.min = state.dashboard.scatterMag ? 0.0 : 0.5;
         
-        state.charts.scatter.update();
+        state.charts.scatter.update('none');
     }
 
     /**
@@ -363,7 +372,7 @@
 
         // Update other charts if they exist
         if (state.charts.scatter) {
-            state.charts.scatter.update('none');
+            refreshScatterData();
         }
 
         if (state.charts.histogram) {
@@ -569,12 +578,12 @@
                 ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
                 
                 // Slightly deeper transparent fill
-                ctx.fillStyle = baseColor.replace('1.0)', '0.15)'); 
+                ctx.fillStyle = baseColor + '26'; // approx 0.15 opacity in hex (26/255)
                 ctx.fill();
                 
                 // Thicker, fully opaque dashed border
                 ctx.lineWidth = 3; 
-                ctx.strokeStyle = baseColor; // Use the full 1.0 opacity base colour
+                ctx.strokeStyle = baseColor; 
                 ctx.setLineDash([8, 6]);     // Longer dashes, wider gaps
                 ctx.stroke();
                 
@@ -582,8 +591,8 @@
             };
 
             // Draw for Dataset 0 (Alpha) and Dataset 1 (Beta)
-            drawEllipseForDataset(0, 'rgba(0, 150, 200, 1.0)'); // Deep vibrant teal/blue for Alpha
-            drawEllipseForDataset(1, 'rgba(100, 100, 100, 1.0)'); // Mid-grey for Beta
+            drawEllipseForDataset(0, '#0096c8'); // Alpha
+            drawEllipseForDataset(1, '#a1a1aa'); // Beta
         }
     };
 
@@ -604,19 +613,19 @@
                     {
                         label: 'Alpha Particles',
                         data: [],
-                        backgroundColor: 'rgba(0, 150, 200, 0.6)',
+                        backgroundColor: '#0096c899',
                         pointRadius: 1.5
                     },
                     {
                         label: 'Beta Particles',
                         data: [],
-                        backgroundColor: 'rgba(100, 100, 100, 0.3)',
+                        backgroundColor: '#a1a1aa4d',
                         pointRadius: 1.5
                     },
                     {
                         label: 'Cosmic Muons',
                         data: [],
-                        backgroundColor: 'rgba(150, 150, 150, 0.2)',
+                        backgroundColor: '#71717a33',
                         pointRadius: 1.5
                     }
                 ]
@@ -634,7 +643,8 @@
                         position: 'top',
                         labels: { 
                             font: { family: "'Geist', sans-serif", weight: '500', size: 14 },
-                            color: '#52525b'
+                            color: '#52525b',
+                            padding: 20
                         }
                     }
                 },
@@ -702,9 +712,9 @@
                         label: 'Alpha (MeV)',
                         grouped: false,
                         data: mapBins(new Array(10).fill(0)),
-                        backgroundColor: 'rgba(0, 150, 200, 0.6)',
+                        backgroundColor: '#0096c899',
                         errorBarLineWidth: 2,
-                        errorBarColor: 'rgba(0, 150, 200, 0.8)',
+                        errorBarColor: '#0096c8cc',
                         barPercentage: 1.0,
                         categoryPercentage: 1.0
                     },
@@ -712,9 +722,9 @@
                         label: 'Beta (MeV)',
                         grouped: false,
                         data: mapBins(new Array(10).fill(0)),
-                        backgroundColor: 'rgba(100, 100, 100, 0.3)',
+                        backgroundColor: '#a1a1aa4d',
                         errorBarLineWidth: 2,
-                        errorBarColor: 'rgba(100, 100, 100, 0.5)',
+                        errorBarColor: '#a1a1aa80',
                         barPercentage: 1.0,
                         categoryPercentage: 1.0
                     }
@@ -786,8 +796,8 @@
                     {
                         label: 'Alpha (MeV/c)',
                         data: [],
-                        borderColor: 'rgba(0, 150, 200, 1.0)',
-                        backgroundColor: 'rgba(0, 150, 200, 0.6)',
+                        borderColor: '#0096c8',
+                        backgroundColor: '#0096c899',
                         borderWidth: 0,
                         barPercentage: 1.0,
                         categoryPercentage: 1.0,
@@ -801,7 +811,7 @@
                         pointBackgroundColor: 'transparent',
                         
                         // --- VERTICAL ERROR LINE ---
-                        errorBarColor: 'rgba(0, 150, 200, 0.4)',
+                        errorBarColor: '#0096c866',
                         errorBarLineWidth: 1,
                         
                         // --- FORCE HIDE WHISKERS (CAPS) ---
@@ -815,8 +825,8 @@
                     {
                         label: 'Beta (MeV/c)',
                         data: [],
-                        borderColor: 'rgba(100, 100, 100, 1.0)',
-                        backgroundColor: 'rgba(100, 100, 100, 0.3)',
+                        borderColor: '#a1a1aa',
+                        backgroundColor: '#a1a1aa4d',
                         borderWidth: 0,
                         barPercentage: 1.0,
                         categoryPercentage: 1.0,
@@ -828,7 +838,7 @@
                         pointBorderColor: 'transparent',
                         pointBackgroundColor: 'transparent',
                         
-                        errorBarColor: 'rgba(100, 100, 100, 0.4)',
+                        errorBarColor: '#a1a1aa66',
                         errorBarLineWidth: 1,
                         errorBarWhiskerLineWidth: 0,
                         errorBarWhiskerRatio: 0,
@@ -840,8 +850,8 @@
                     {
                         label: 'Cosmic Muons (MeV/c)',
                         data: [],
-                        borderColor: 'rgba(150, 150, 150, 1.0)',
-                        backgroundColor: 'rgba(150, 150, 150, 0.2)',
+                        borderColor: '#71717a',
+                        backgroundColor: '#71717a33',
                         borderWidth: 0,
                         barPercentage: 1.0,
                         categoryPercentage: 1.0,
@@ -853,7 +863,7 @@
                         pointBorderColor: 'transparent',
                         pointBackgroundColor: 'transparent',
                         
-                        errorBarColor: 'rgba(150, 150, 150, 0.4)',
+                        errorBarColor: '#71717a4d',
                         errorBarLineWidth: 1,
                         errorBarWhiskerLineWidth: 0,
                         errorBarWhiskerRatio: 0,
@@ -947,6 +957,20 @@
         state.width = viewportWidth;
         state.height = viewportHeight;
 
+        // Calculate spawn boundaries based on UI docks
+        const controlsDock = document.getElementById('live-controls-dock');
+        const hudDock = document.getElementById('live-hud');
+
+        if (window.innerWidth > 800 && controlsDock && hudDock) {
+            const controlsRect = controlsDock.getBoundingClientRect();
+            const hudRect = hudDock.getBoundingClientRect();
+            state.spawnMinX = controlsRect.right;
+            state.spawnMaxX = hudRect.left;
+        } else {
+            state.spawnMinX = 0;
+            state.spawnMaxX = state.width;
+        }
+
         // Scale buffer for Retina
         canvas.width = viewportWidth * dpr;
         canvas.height = viewportHeight * dpr;
@@ -1011,7 +1035,16 @@
                 state.liveMuonData.push(newItem);
                 
                 if (state.charts.scatter) {
-                    state.charts.scatter.data.datasets[2].data.push({ x: newItem.length, y: newItem.tortuosity });
+                    const chartData = state.charts.scatter.data.datasets[2].data;
+                    const buffer = state.liveMuonData;
+                    const item = { x: newItem.length, y: newItem.tortuosity };
+
+                    if (chartData.length < buffer.capacity) {
+                        chartData.push(item);
+                    } else {
+                        const idx = (buffer.head - 1 + buffer.capacity) % buffer.capacity;
+                        chartData[idx] = item;
+                    }
                 }
                 state.dashboard.dirty = true;
                 return;
@@ -1108,17 +1141,18 @@
      * Task 3: The Radon Spawner Engine.
      */
     function spawnParticles(timestamp) {
-
         if (alphaCount >= 2500) {
             return;
         }
 
         if (!lastTime) {
             lastTime = timestamp;
+            lastLogTime = timestamp;
             return;
         }
 
-        const deltaTime = (timestamp - lastTime) / 1000; // Time in seconds
+        let deltaTime = (timestamp - lastTime) / 1000; // Time in seconds
+        if (deltaTime > 1.0) deltaTime = 1.0; // Cap to prevent bursts
         lastTime = timestamp;
 
         // Accumulate fractional particles to maintain exactly ~20/sec
@@ -1128,7 +1162,7 @@
             spawnAccumulator -= 1;
 
             // Gas Diffusion: Radon spawner origins are random across the chamber
-            const startX = Math.random() * state.width;
+            const startX = state.spawnMinX + Math.random() * (state.spawnMaxX - state.spawnMinX);
             const startY = Math.random() * state.height;
 
             // The 3:2 Ratio (60% Alpha chance, 40% Beta chance)
@@ -1152,7 +1186,7 @@
 
         // Rare Cosmic Ray Muon (Background radiation)
         if (Math.random() < 0.005) {
-             const startX = Math.random() * state.width;
+             const startX = state.spawnMinX + Math.random() * (state.spawnMaxX - state.spawnMinX);
              const startY = Math.random() < 0.5 ? 0 : state.height; 
              
              const metadata = generateMetadata('muon', startX, startY);
@@ -1162,15 +1196,18 @@
 
         // Log verification every 5 seconds
         if (timestamp - lastLogTime > 5000) {
-            const actualRate = (totalSpawned / ((timestamp - (lastLogTime || timestamp)) / 1000)).toFixed(2);
+            const duration = (timestamp - lastLogTime) / 1000;
+            const actualRate = (totalSpawned / duration).toFixed(2);
             const alphaRatio = ((alphaCount / totalSpawned) * 100).toFixed(1);
             const betaRatio = ((betaCount / totalSpawned) * 100).toFixed(1);
             
             console.log(`Task 3 Verify: Rate ~${actualRate}/sec | Alpha: ${alphaRatio}% | Beta: ${betaRatio}% | Active: ${particles.length}`);
             
-            // Reset for next interval if we want per-interval stats, 
-            // or keep cumulative. Let's keep cumulative for better averages.
+            // Reset for next interval for per-interval stats
             lastLogTime = timestamp;
+            totalSpawned = 0;
+            alphaCount = 0;
+            betaCount = 0;
         }
     }
 
@@ -1193,6 +1230,11 @@
                 particle.draw(ctx);
                 if (!particle.active) particles.splice(i, 1);
             }
+
+            // Update Live HUD
+            document.getElementById('hud-alpha-count').textContent = state.liveAlphaData.size;
+            document.getElementById('hud-beta-count').textContent = state.liveBetaData.size;
+            document.getElementById('hud-muon-count').textContent = state.liveMuonData.size;
         } else {
             // Keep simulation physics ticking even if not drawing them
             for (let i = particles.length - 1; i >= 0; i--) {

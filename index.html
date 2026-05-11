@@ -15,43 +15,65 @@
 </head>
 <body>
     <div id="live-chamber" class="view-container">
+        <div id="live-chamber-header">
+            <div id="live-controls-dock">
+                <div class="dock-controls">
+                    <div class="glass-toggle">
+                        <label class="glass-switch-label">
+                            <span class="glass-switch-text">Alphas</span>
+                            <div class="glass-switch">
+                                <input type="checkbox" id="showAlpha" checked>
+                                <span class="glass-slider"></span>
+                            </div>
+                        </label>
+                    </div>
+                    <div class="dock-divider"></div>
+                    <div class="glass-toggle">
+                        <label class="glass-switch-label">
+                            <span class="glass-switch-text">Betas</span>
+                            <div class="glass-switch">
+                                <input type="checkbox" id="showBeta" checked>
+                                <span class="glass-slider"></span>
+                            </div>
+                        </label>
+                    </div>
+                    <div class="dock-divider"></div>
+                    <div class="glass-toggle">
+                        <label class="glass-switch-label">
+                            <span class="glass-switch-text">B-Field</span>
+                            <div class="glass-switch">
+                                <input type="checkbox" id="toggleBFieldSim">
+                                <span class="glass-slider bfield-slider"></span>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div id="live-hud" class="glass-panel">
+                <div class="hud-item alpha">
+                    <span class="hud-dot"></span>
+                    <span class="hud-label">ALPHAS</span>
+                    <span id="hud-alpha-count" class="hud-value">0</span>
+                </div>
+                <div class="hud-item beta">
+                    <span class="hud-dot"></span>
+                    <span class="hud-label">BETAS</span>
+                    <span id="hud-beta-count" class="hud-value">0</span>
+                </div>
+                <div class="hud-item muon">
+                    <span class="hud-dot"></span>
+                    <span class="hud-label">MUONS</span>
+                    <span id="hud-muon-count" class="hud-value">0</span>
+                </div>
+            </div>
+        </div>
+
         <div id="simulation-viewport">
             <canvas id="chamberCanvas"></canvas>
         </div>
 
-        <div id="live-controls-dock">
-            <div class="dock-controls">
-                <div class="glass-toggle">
-                    <label class="glass-switch-label">
-                        <span class="glass-switch-text">Alphas</span>
-                        <div class="glass-switch">
-                            <input type="checkbox" id="showAlpha" checked>
-                            <span class="glass-slider"></span>
-                        </div>
-                    </label>
-                </div>
-                <div class="dock-divider"></div>
-                <div class="glass-toggle">
-                    <label class="glass-switch-label">
-                        <span class="glass-switch-text">Betas</span>
-                        <div class="glass-switch">
-                            <input type="checkbox" id="showBeta" checked>
-                            <span class="glass-slider"></span>
-                        </div>
-                    </label>
-                </div>
-                <div class="dock-divider"></div>
-                <div class="glass-toggle">
-                    <label class="glass-switch-label">
-                        <span class="glass-switch-text">B-Field (1.0T)</span>
-                        <div class="glass-switch">
-                            <input type="checkbox" id="toggleBFieldSim">
-                            <span class="glass-slider bfield-slider"></span>
-                        </div>
-                    </label>
-                </div>
-            </div>
-        </div>
+        <div id="live-controls-dock-placeholder" style="display:none;"></div>
     </div>
 
     <div id="morphology-view" class="tab-view view-container">
@@ -107,6 +129,9 @@
             </div>
             <div class="canvas-container">
                 <canvas id="momentumChart"></canvas>
+            </div>
+            <div class="card-content">
+                <p class="chart-description">Statistical momentum spectrum (MeV/c) derived from track curvature and density.</p>
             </div>
         </div>
     </div>
