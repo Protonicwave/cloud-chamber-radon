@@ -29,16 +29,16 @@
     const ctx = canvas.getContext('2d');
     const alphaToggle = document.getElementById('showAlpha');
     const betaToggle = document.getElementById('showBeta');
+    const audioToggle = document.getElementById('toggleAudio');
     
     // View switching elements
     const liveView = document.getElementById('live-chamber');
     const morphologyView = document.getElementById('morphology-view');
     const energyView = document.getElementById('energy-view');
     const momentumView = document.getElementById('momentum-view');
-    const btnLive = document.getElementById('btn-live');
-    const btnMorphology = document.getElementById('btn-morphology');
-    const btnEnergy = document.getElementById('btn-energy');
-    const btnMomentum = document.getElementById('btn-momentum');
+    const btnPrev = document.getElementById('nav-prev');
+    const btnNext = document.getElementById('nav-next');
+    const haltAlertPulse = document.getElementById('halt-alert-pulse');
 
     // --- Simulation State ---
     class RingBuffer {
@@ -83,18 +83,30 @@
             }
             return this.buffer.slice(this.head).concat(this.buffer.slice(0, this.head));
         }
+
+        forEach(callback) {
+            const available = this.size;
+            for (let i = 0; i < available; i++) {
+                const idx = (this.head - available + i + this.capacity) % this.capacity;
+                callback(this.buffer[idx], i);
+            }
+        }
     }
 
     const state = {
         magneticField: false,
         showAlpha: alphaToggle.checked,
         showBeta: betaToggle.checked,
+        audioEnabled: audioToggle.checked,
+        glowEnabled: true,
+        halted: false,
         width: 0,
         height: 0,
         spawnMinX: 0,
         spawnMaxX: 0,
         activeView: 'live', // 'live', 'morphology', or 'energy'
         isTransitioning: false,
+        touchStartX: 0,
         buffers: {
             density: null,
             densityCtx: null,
@@ -113,8 +125,8 @@
             alpha: { meanX: 0, meanY: 0, sdX: 0, sdY: 0, sumX: 0, sumX2: 0, sumY: 0, sumY2: 0, count: 0 },
             beta: { meanX: 0, meanY: 0, sdX: 0, sdY: 0, sumX: 0, sumX2: 0, sumY: 0, sumY2: 0, count: 0 }
         },
-        liveAlphaData: new RingBuffer(2500),
-        liveBetaData: new RingBuffer(2500),
+        liveAlphaData: new RingBuffer(3000),
+        liveBetaData: new RingBuffer(3000),
         liveMuonData: new RingBuffer(1000)
     };
 
@@ -128,7 +140,10 @@
     let totalSpawned = 0;
     let alphaCount = 0;
     let betaCount = 0;
+    let lifetimeAlphaCount = 0;
+    let lifetimeBetaCount = 0;
     let lastLogTime = 0;
+    let lastHUDUpdateTime = 0;
 
     /**
      * Map histogram bins to Chart.js Error Bar format.
@@ -161,6 +176,64 @@
     }
 
     /**
+     * Throttled haptic engine for mobile UX
+     */
+    function vibrate(duration) {
+        if (navigator.vibrate && state.audioEnabled) {
+            try { navigator.vibrate(duration); } catch(e) {}
+        }
+    }
+
+    const Haptics = {
+        lastPulseTime: 0,
+        pulse(type) {
+            const now = performance.now();
+            if (now - this.lastPulseTime < 100) return;
+            
+            if (type === 'alpha') vibrate(15);
+            else if (type === 'beta') vibrate(5);
+            this.lastPulseTime = now;
+        }
+    };
+
+    /**
+     * Synthesized Geiger counter audio engine.
+     */
+    const Geiger = {
+        ctx: null,
+        init() {
+            if (this.ctx) return;
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        },
+        playClick(type) {
+            if (!state.audioEnabled) return;
+            this.init();
+            if (this.ctx.state === 'suspended') this.ctx.resume();
+
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+
+            // Synthesis settings
+            const freq = type === 'alpha' ? 800 : 400;
+            const vol = type === 'alpha' ? 0.1 : 0.05;
+            const duration = 0.005;
+
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(10, this.ctx.currentTime + duration);
+
+            gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+
+            osc.start();
+            osc.stop(this.ctx.currentTime + duration);
+        }
+    };
+
+    /**
      * Represents a radiation particle track.
      * Task 4: Particle Rendering Algorithms.
      */
@@ -168,10 +241,11 @@
         constructor(x, y, type, metadata) {
             this.x = x;
             this.y = y;
+            this.prevX = x;
+            this.prevY = y;
             this.type = type;
             this.active = true;
             this.distanceTravelled = 0;
-            this.history = []; // For schematic segments
             if (this.type === 'beta') {
                 this.dashPattern = [2, 2];
             }
@@ -227,10 +301,7 @@
          * Update particle position and lifespan.
          */
         update() {
-            if (!this.active && Math.random() < 0.02) {
-                this.history.shift();
-                return;
-            } else if (!this.active) {
+            if (!this.active) {
                 return;
             }
 
@@ -256,7 +327,6 @@
             this.y += Math.sin(this.angle) * this.speed;
 
             this.distanceTravelled += this.speed;
-            this.history.push({x: this.x, y: this.y, prevX: this.prevX, prevY: this.prevY});
 
             if (this.distanceTravelled >= this.lifespan) {
                 this.active = false;
@@ -284,18 +354,26 @@
          * Draw the particle track segment using a Schematic technique.
          */
         draw(ctx) {
-            if (this.history.length === 0) return;
+            if (!this.active) return;
 
             ctx.save();
-            ctx.beginPath();
-            
-            // Draw all segments in history
-            const first = this.history[0];
-            ctx.moveTo(first.prevX, first.prevY);
-            for (let i = 0; i < this.history.length; i++) {
-                ctx.lineTo(this.history[i].x, this.history[i].y);
+
+            if (state.glowEnabled) {
+                if (this.type === 'alpha') {
+                    ctx.shadowBlur = 15;
+                    ctx.shadowColor = '#00ffff';
+                } else if (this.type === 'beta') {
+                    ctx.shadowBlur = 8;
+                    ctx.shadowColor = '#a1a1aa';
+                }
             }
-            
+
+            ctx.beginPath();
+
+            // Draw current segment
+            ctx.moveTo(this.prevX, this.prevY);
+            ctx.lineTo(this.x, this.y);
+
             if (this.type === 'alpha') {
                 ctx.strokeStyle = '#0096c8';
                 ctx.lineWidth = 2.5;
@@ -307,15 +385,12 @@
                 ctx.strokeStyle = '#71717a';
                 ctx.lineWidth = 1.0;
             }
-            
+
             ctx.stroke();
             ctx.restore();
-            
-            if (this.active) {
-                this.drawVector(ctx);
-            }
-        }
-    }
+
+            this.drawVector(ctx);
+        }    }
 
     /**
      * Toggle the magnetic field simulation for the scatter chart.
@@ -343,25 +418,27 @@
             return p.tortuosity; // Muons unchanged
         };
 
-        state.charts.scatter.data.datasets[0].data = state.liveAlphaData.toArray().map(p => ({
-            x: p.length, y: getObserved(p, 'alpha')
-        }));
-        state.charts.scatter.data.datasets[1].data = state.liveBetaData.toArray().map(p => ({
-            x: p.length, y: getObserved(p, 'beta')
-        }));
-        state.charts.scatter.data.datasets[2].data = state.liveMuonData.toArray().map(p => ({
-            x: p.length, y: getObserved(p, 'muon')
-        }));
+        const alphaData = [];
+        state.liveAlphaData.forEach(p => alphaData.push({ x: p.length, y: getObserved(p, 'alpha') }));
+        state.charts.scatter.data.datasets[0].data = alphaData;
+
+        const betaData = [];
+        state.liveBetaData.forEach(p => betaData.push({ x: p.length, y: getObserved(p, 'beta') }));
+        state.charts.scatter.data.datasets[1].data = betaData;
+
+        const muonData = [];
+        state.liveMuonData.forEach(p => muonData.push({ x: p.length, y: getObserved(p, 'muon') }));
+        state.charts.scatter.data.datasets[2].data = muonData;
+
         state.charts.scatter.data.datasets[0].label = `Alpha Particles [${state.liveAlphaData.size}]`;
         state.charts.scatter.data.datasets[1].label = `Beta Particles [${state.liveBetaData.size}]`;
         state.charts.scatter.data.datasets[2].label = `Cosmic Muons [${state.liveMuonData.size}]`;
         
         // Update Y axis min
         state.charts.scatter.options.scales.y.min = state.dashboard.scatterMag ? 0.0 : 0.5;
-        
-        state.charts.scatter.update('none');
-    }
 
+        state.charts.scatter.update('none');
+        }
     /**
      * Render the dashboard components incrementally per-frame.
      */
@@ -379,22 +456,41 @@
             const alphaEnergyBins = new Array(10).fill(0);
             const betaEnergyBins = new Array(10).fill(0);
 
-            state.liveAlphaData.toArray().forEach(p => {
+            state.liveAlphaData.forEach(p => {
                 const newBin = Math.floor(p.energy);
                 if (!isNaN(newBin) && newBin >= 0 && newBin <= 9) {
                     alphaEnergyBins[newBin]++;
                 }
             });
 
-            state.liveBetaData.toArray().forEach(p => {
+            state.liveBetaData.forEach(p => {
                 const newBin = Math.floor(p.energy);
                 if (!isNaN(newBin) && newBin >= 0 && newBin <= 9) {
                     betaEnergyBins[newBin]++;
                 }
             });
 
+            // Initialize previous bins state if missing
+            if (!state.prevAlphaBins) state.prevAlphaBins = new Array(10).fill(0);
+            if (!state.prevBetaBins) state.prevBetaBins = new Array(10).fill(0);
+
+            // Re-create gradients since we need them here
+            const ctx = document.getElementById('histogramChart').getContext('2d');
+            const gradientBlue = ctx.createLinearGradient(0, 0, 0, 400);
+            gradientBlue.addColorStop(0, 'rgba(0, 150, 200, 0.8)');
+            gradientBlue.addColorStop(1, 'rgba(0, 150, 200, 0.1)');
+            
+            const gradientGrey = ctx.createLinearGradient(0, 0, 0, 400);
+            gradientGrey.addColorStop(0, 'rgba(161, 161, 170, 0.8)');
+            gradientGrey.addColorStop(1, 'rgba(161, 161, 170, 0.1)');
+
+            // Assign static gradients for constant smoothness
+            state.charts.histogram.data.datasets[0].backgroundColor = gradientBlue;
+            state.charts.histogram.data.datasets[1].backgroundColor = gradientGrey;
+
             state.charts.histogram.data.datasets[0].data = mapBins(alphaEnergyBins);
             state.charts.histogram.data.datasets[1].data = mapBins(betaEnergyBins);
+            
             state.charts.histogram.data.datasets[0].label = `Alpha (MeV) [${state.liveAlphaData.size}]`;
             state.charts.histogram.data.datasets[1].label = `Beta (MeV) [${state.liveBetaData.size}]`;
             state.charts.histogram.update('none');
@@ -424,17 +520,17 @@
                 binsArray[binIdx]++;
             };
 
-            state.liveAlphaData.toArray().forEach(p => {
+            state.liveAlphaData.forEach(p => {
                 const mom = Math.sqrt(p.energy ** 2 + 2 * alphaMass * p.energy); // Relativistic
                 addToLogBin(mom, alphaBins);
             });
 
-            state.liveBetaData.toArray().forEach(p => {
+            state.liveBetaData.forEach(p => {
                 const mom = Math.sqrt(p.energy ** 2 + 2 * betaMass * p.energy); // Relativistic
                 addToLogBin(mom, betaBins);
             });
 
-            state.liveMuonData.toArray().forEach(p => {
+            state.liveMuonData.forEach(p => {
                 const mom = Math.sqrt(p.energy ** 2 + 2 * muonMass * p.energy); // Relativistic
                 addToLogBin(mom, muonBins);
             });
@@ -469,16 +565,30 @@
     /**
      * Switch between Live Chamber and Analytics Dashboard.
      */
-    function switchView(view) {
+    function switchView(view, direction = 'next') {
         if (state.activeView === view || state.isTransitioning) return;
 
         state.isTransitioning = true;
+        const slideClass = direction === 'next' ? 'slide-left' : 'slide-right';
+
+        // 0. Update Nav Arrow Theme & Force Repaint Immediately
+        const navArrows = document.querySelectorAll('.side-nav-arrow');
+        navArrows.forEach(btn => {
+            if (view === 'live') {
+                btn.classList.add('theme-dark');
+                btn.classList.remove('theme-light');
+            } else {
+                btn.classList.add('theme-light');
+                btn.classList.remove('theme-dark');
+            }
+            void btn.offsetHeight; // Force immediate repaint
+        });
 
         const viewMap = {
-            'live': { el: liveView, btn: btnLive, display: 'flex' },
-            'morphology': { el: morphologyView, btn: btnMorphology, display: 'block' },
-            'energy': { el: energyView, btn: btnEnergy, display: 'block' },
-            'momentum': { el: momentumView, btn: btnMomentum, display: 'block' }
+            'live': { el: liveView, display: 'flex' },
+            'morphology': { el: morphologyView, display: 'block' },
+            'energy': { el: energyView, display: 'block' },
+            'momentum': { el: momentumView, display: 'block' }
         };
 
         const currentView = viewMap[state.activeView];
@@ -486,52 +596,98 @@
 
         // 1. Mark current view as exiting
         if (currentView && currentView.el) {
-            currentView.el.classList.add('exiting');
+            currentView.el.classList.add('exiting', slideClass);
         }
-
-        // 2. Update state and button UI immediately
-        state.activeView = view;
-        [btnLive, btnMorphology, btnEnergy, btnMomentum].forEach(btn => btn.classList.remove('active'));
-        if (nextView.btn) nextView.btn.classList.add('active');
 
         // 3. Middle of transition: Swap displays
         setTimeout(() => {
+            // 2. Update state - delayed until physical swap to keep old view rendering
+            state.activeView = view;
+
+            // Force repaint again during swap
+            navArrows.forEach(btn => { void btn.offsetHeight; });
+
+            // Handle halt overlay visibility if simulation is finished
+            if (state.halted) {
+                document.getElementById('halt-overlay').style.display = (view === 'live') ? 'block' : 'none';
+            }
+
             if (currentView && currentView.el) {
                 currentView.el.style.display = 'none';
-                currentView.el.classList.remove('exiting');
+                currentView.el.classList.remove('exiting', slideClass);
             }
 
             if (nextView && nextView.el) {
                 nextView.el.style.display = nextView.display;
-                nextView.el.classList.add('entering');
-            }
-        }, 300);
+                nextView.el.classList.add('entering', slideClass);
 
-        // 4. End of transition: Cleanup and render
+                // Trigger layout-heavy updates immediately after display: block to prevent snaps
+                if (view === 'live') {
+                    initialiseCanvas();
+                } else if (view === 'morphology') {
+                    if (!state.charts.scatter) renderScatter();
+                    else state.charts.scatter.resize();
+                } else if (view === 'energy') {
+                    if (!state.charts.histogram) renderHistogram();
+                    else state.charts.histogram.resize();
+                } else if (view === 'momentum') {
+                    if (!state.charts.momentum) renderMomentumChart();
+                    else state.charts.momentum.resize();
+                }
+            }
+        }, 400);
+
+        // 4. End of transition: Cleanup
         setTimeout(() => {
             if (nextView && nextView.el) {
-                nextView.el.classList.remove('entering');
+                nextView.el.classList.remove('entering', slideClass);
             }
 
-            // Trigger specific view initialisation
-            if (view === 'live') {
-                initialiseCanvas();
-            } else if (view === 'morphology') {
-                if (!state.charts.scatter) renderScatter();
-                else state.charts.scatter.resize();
-                state.dashboard.dirty = true;
-            } else if (view === 'energy') {
-                if (!state.charts.histogram) renderHistogram();
-                else state.charts.histogram.resize();
-                state.dashboard.dirty = true;
-            } else if (view === 'momentum') {
-                if (!state.charts.momentum) renderMomentumChart();
-                else state.charts.momentum.resize();
-                state.dashboard.dirty = true;
-            }
+            if (view !== 'live') state.dashboard.dirty = true;
             state.isTransitioning = false;
-        }, 400);
+
+            // Final force repaint when animations finish
+            navArrows.forEach(btn => { void btn.offsetHeight; });
+        }, 800);
     }
+
+    const externalTooltipHandler = (context) => {
+        // Tooltip Element
+        let tooltipEl = document.getElementById('chartjs-tooltip');
+
+        // Create element on first render
+        if (!tooltipEl) {
+            tooltipEl = document.createElement('div');
+            tooltipEl.id = 'chartjs-tooltip';
+            document.body.appendChild(tooltipEl);
+        }
+
+        // Hide if no tooltip
+        const tooltipModel = context.tooltip;
+        if (tooltipModel.opacity === 0) {
+            tooltipEl.style.opacity = 0;
+            return;
+        }
+
+        // Set Text
+        if (tooltipModel.body) {
+            const bodyLines = tooltipModel.body.map(b => b.lines);
+            let innerHtml = '<div>';
+            bodyLines.forEach(line => {
+                innerHtml += `<div style="margin-bottom: 4px;">${line}</div>`;
+            });
+            innerHtml += '</div>';
+            tooltipEl.innerHTML = innerHtml;
+        }
+
+        const position = context.chart.canvas.getBoundingClientRect();
+
+        // Display, position, and set styles for font
+        tooltipEl.style.opacity = 1;
+        tooltipEl.style.left = position.left + window.pageXOffset + tooltipModel.caretX + 'px';
+        tooltipEl.style.top = position.top + window.pageYOffset + tooltipModel.caretY - 10 + 'px';
+        tooltipEl.style.padding = tooltipModel.options.padding + 'px ' + tooltipModel.options.padding + 'px';
+    };
 
     const confidenceEllipsePlugin = {
         id: 'confidenceEllipse',
@@ -614,19 +770,22 @@
                         label: 'Alpha Particles',
                         data: [],
                         backgroundColor: '#0096c899',
-                        pointRadius: 1.5
+                        pointRadius: 1.5,
+                        parsing: false
                     },
                     {
                         label: 'Beta Particles',
                         data: [],
                         backgroundColor: '#a1a1aa4d',
-                        pointRadius: 1.5
+                        pointRadius: 1.5,
+                        parsing: false
                     },
                     {
                         label: 'Cosmic Muons',
                         data: [],
                         backgroundColor: '#71717a33',
-                        pointRadius: 1.5
+                        pointRadius: 1.5,
+                        parsing: false
                     }
                 ]
             },
@@ -634,7 +793,7 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 animation: {
-                    duration: 150,
+                    duration: 300,
                     easing: 'easeOutQuart'
                 },
 
@@ -642,10 +801,17 @@
                     legend: { 
                         position: 'top',
                         labels: { 
-                            font: { family: "'Geist', sans-serif", weight: '500', size: 14 },
+                            font: { family: "'Geist', sans-serif", weight: '500', size: window.innerWidth < 480 ? 10 : 14 },
                             color: '#52525b',
-                            padding: 20
+                            padding: window.innerWidth < 480 ? 8 : 20,
+                            usePointStyle: true,
+                            pointStyle: 'circle'
                         }
+                    },
+                    tooltip: {
+                        enabled: false,
+                        position: 'nearest',
+                        external: externalTooltipHandler
                     }
                 },
                 scales: {
@@ -653,32 +819,36 @@
                         title: { 
                             display: true, 
                             text: 'Track Length (pixels)',
-                            font: { family: "'Geist', sans-serif", weight: '500', size: 14 },
+                            font: { family: "'Geist', sans-serif", weight: '500', size: window.innerWidth < 480 ? 10 : 14 },
                             color: '#52525b'
                         },
                         ticks: { 
-                            font: { family: "'Geist', sans-serif", weight: '500', size: 13 },
-                            color: '#71717a'
+                            font: { family: "'Geist', sans-serif", weight: '500', size: window.innerWidth < 480 ? 9 : 13 },
+                            color: '#71717a',
+                            autoSkip: true,
+                            maxTicksLimit: window.innerWidth < 480 ? 6 : 10
                         },
                         min: 0,
                         max: 30,
-                        grid: { display: false },
+                        grid: { color: 'rgba(255, 255, 255, 0.05)', borderDash: [4, 4], drawTicks: false },
                         border: { display: false }
                     },
                     y: {
                         title: { 
                             display: true, 
                             text: 'Tortuosity Index',
-                            font: { family: "'Geist', sans-serif", weight: '500', size: 14 },
+                            font: { family: "'Geist', sans-serif", weight: '500', size: window.innerWidth < 480 ? 10 : 14 },
                             color: '#52525b'
                         },
                         ticks: { 
-                            font: { family: "'Geist', sans-serif", weight: '500', size: 13 },
-                            color: '#71717a'
+                            font: { family: "'Geist', sans-serif", weight: '500', size: window.innerWidth < 480 ? 9 : 13 },
+                            color: '#71717a',
+                            autoSkip: true,
+                            maxTicksLimit: window.innerWidth < 480 ? 6 : 10
                         },
                         min: 0.5,
                         max: 1.05,
-                        grid: { color: 'rgba(0, 0, 0, 0.06)', borderDash: [4, 4], drawTicks: false },
+                        grid: { color: 'rgba(255, 255, 255, 0.05)', borderDash: [4, 4], drawTicks: false },
                         border: { display: false }
                     }
                 },
@@ -703,6 +873,15 @@
         // Bin labels (Range 0-9)
         const bins = Array.from({ length: 10 }, (_, i) => i);
 
+        // Gradient Definitions
+        const gradientBlue = ctx.createLinearGradient(0, 0, 0, 400);
+        gradientBlue.addColorStop(0, 'rgba(0, 150, 200, 0.8)');
+        gradientBlue.addColorStop(1, 'rgba(0, 150, 200, 0.1)');
+        
+        const gradientGrey = ctx.createLinearGradient(0, 0, 0, 400);
+        gradientGrey.addColorStop(0, 'rgba(161, 161, 170, 0.8)');
+        gradientGrey.addColorStop(1, 'rgba(161, 161, 170, 0.1)');
+
         const chartConfig = {
             type: 'barWithErrorBars',
             data: {
@@ -712,7 +891,7 @@
                         label: 'Alpha (MeV)',
                         grouped: false,
                         data: mapBins(new Array(10).fill(0)),
-                        backgroundColor: '#0096c899',
+                        backgroundColor: gradientBlue,
                         errorBarLineWidth: 2,
                         errorBarColor: '#0096c8cc',
                         barPercentage: 1.0,
@@ -722,7 +901,7 @@
                         label: 'Beta (MeV)',
                         grouped: false,
                         data: mapBins(new Array(10).fill(0)),
-                        backgroundColor: '#a1a1aa4d',
+                        backgroundColor: gradientGrey,
                         errorBarLineWidth: 2,
                         errorBarColor: '#a1a1aa80',
                         barPercentage: 1.0,
@@ -734,7 +913,7 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 animation: {
-                    duration: 150,
+                    duration: 300,
                     easing: 'easeOutQuart'
                 },
                 scales: {
@@ -742,37 +921,48 @@
                         title: { 
                             display: true, 
                             text: 'Energy Range (MeV)',
-                            font: { family: "'Geist', sans-serif", weight: '500', size: 14 },
+                            font: { family: "'Geist', sans-serif", weight: '500', size: window.innerWidth < 480 ? 10 : 14 },
                             color: '#52525b'
                         },
                         ticks: { 
-                            font: { family: "'Geist', sans-serif", weight: '500', size: 13 },
-                            color: '#71717a'
+                            font: { family: "'Geist', sans-serif", weight: '500', size: window.innerWidth < 480 ? 9 : 13 },
+                            color: '#71717a',
+                            autoSkip: true,
+                            maxTicksLimit: window.innerWidth < 480 ? 6 : 10
                         },
-                        grid: { display: false },
+                        grid: { color: 'rgba(255, 255, 255, 0.05)', borderDash: [4, 4], drawTicks: false },
                         border: { display: false }
                     },
                     y: {
                         title: { 
                             display: true, 
                             text: 'Event Frequency',
-                            font: { family: "'Geist', sans-serif", weight: '500', size: 14 },
+                            font: { family: "'Geist', sans-serif", weight: '500', size: window.innerWidth < 480 ? 10 : 14 },
                             color: '#52525b'
                         },
                         ticks: { 
-                            font: { family: "'Geist', sans-serif", weight: '500', size: 13 },
-                            color: '#71717a'
+                            font: { family: "'Geist', sans-serif", weight: '500', size: window.innerWidth < 480 ? 9 : 13 },
+                            color: '#71717a',
+                            autoSkip: true,
+                            maxTicksLimit: window.innerWidth < 480 ? 6 : 10
                         },
-                        grid: { color: 'rgba(0, 0, 0, 0.06)', borderDash: [4, 4], drawTicks: false },
+                        grid: { color: 'rgba(255, 255, 255, 0.05)', borderDash: [4, 4], drawTicks: false },
                         border: { display: false }
                     }
                 },
                 plugins: {
                     legend: {
                         labels: { 
-                            font: { family: "'Geist', sans-serif", weight: '500', size: 14 },
-                            color: '#52525b'
+                            font: { family: "'Geist', sans-serif", weight: '500', size: window.innerWidth < 480 ? 10 : 14 },
+                            color: '#52525b',
+                            usePointStyle: true,
+                            pointStyle: 'circle'
                         }
+                    },
+                    tooltip: {
+                        enabled: false,
+                        position: 'nearest',
+                        external: externalTooltipHandler
                     }
                 }
             }
@@ -789,6 +979,19 @@
 
         if (state.charts.momentum) return;
 
+        // Gradient Definitions
+        const gradientBlue = ctx.createLinearGradient(0, 0, 0, 400);
+        gradientBlue.addColorStop(0, 'rgba(0, 150, 200, 0.8)');
+        gradientBlue.addColorStop(1, 'rgba(0, 150, 200, 0.1)');
+        
+        const gradientGrey = ctx.createLinearGradient(0, 0, 0, 400);
+        gradientGrey.addColorStop(0, 'rgba(161, 161, 170, 0.8)');
+        gradientGrey.addColorStop(1, 'rgba(161, 161, 170, 0.1)');
+
+        const gradientDarkGrey = ctx.createLinearGradient(0, 0, 0, 400);
+        gradientDarkGrey.addColorStop(0, 'rgba(113, 113, 122, 0.8)');
+        gradientDarkGrey.addColorStop(1, 'rgba(113, 113, 122, 0.1)');
+
         const chartConfig = {
             type: 'lineWithErrorBars', // --- Changed from 'line' ---
             data: {
@@ -797,7 +1000,7 @@
                         label: 'Alpha (MeV/c)',
                         data: [],
                         borderColor: '#0096c8',
-                        backgroundColor: '#0096c899',
+                        backgroundColor: gradientBlue,
                         borderWidth: 0,
                         barPercentage: 1.0,
                         categoryPercentage: 1.0,
@@ -826,7 +1029,7 @@
                         label: 'Beta (MeV/c)',
                         data: [],
                         borderColor: '#a1a1aa',
-                        backgroundColor: '#a1a1aa4d',
+                        backgroundColor: gradientGrey,
                         borderWidth: 0,
                         barPercentage: 1.0,
                         categoryPercentage: 1.0,
@@ -851,7 +1054,7 @@
                         label: 'Cosmic Muons (MeV/c)',
                         data: [],
                         borderColor: '#71717a',
-                        backgroundColor: '#71717a33',
+                        backgroundColor: gradientDarkGrey,
                         borderWidth: 0,
                         barPercentage: 1.0,
                         categoryPercentage: 1.0,
@@ -879,7 +1082,7 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 animation: {
-                    duration: 150,
+                    duration: 300,
                     easing: 'easeOutQuart'
                 },
 
@@ -904,37 +1107,48 @@
                         title: { 
                             display: true, 
                             text: 'Momentum (MeV/c)',
-                            font: { family: "'Geist', sans-serif", weight: '500', size: 14 },
+                            font: { family: "'Geist', sans-serif", weight: '500', size: window.innerWidth < 480 ? 10 : 14 },
                             color: '#52525b'
                         },
                         ticks: { 
-                            font: { family: "'Geist', sans-serif", weight: '500', size: 13 },
-                            color: '#71717a'
+                            font: { family: "'Geist', sans-serif", weight: '500', size: window.innerWidth < 480 ? 9 : 13 },
+                            color: '#71717a',
+                            autoSkip: true,
+                            maxTicksLimit: window.innerWidth < 480 ? 6 : 10
                         },
-                        grid: { display: false },
+                        grid: { color: 'rgba(255, 255, 255, 0.05)', borderDash: [4, 4], drawTicks: false },
                         border: { display: false }
                     },
                     y: {
                         title: { 
                             display: true, 
                             text: 'Event Frequency',
-                            font: { family: "'Geist', sans-serif", weight: '500', size: 14 },
+                            font: { family: "'Geist', sans-serif", weight: '500', size: window.innerWidth < 480 ? 10 : 14 },
                             color: '#52525b'
                         },
                         ticks: { 
-                            font: { family: "'Geist', sans-serif", weight: '500', size: 13 },
-                            color: '#71717a'
+                            font: { family: "'Geist', sans-serif", weight: '500', size: window.innerWidth < 480 ? 9 : 13 },
+                            color: '#71717a',
+                            autoSkip: true,
+                            maxTicksLimit: window.innerWidth < 480 ? 6 : 10
                         },
-                        grid: { color: 'rgba(0, 0, 0, 0.06)', borderDash: [4, 4], drawTicks: false },
+                        grid: { color: 'rgba(255, 255, 255, 0.05)', borderDash: [4, 4], drawTicks: false },
                         border: { display: false }
                     }
                 },
                 plugins: {
                     legend: { 
                         labels: { 
-                            font: { family: "'Geist', sans-serif", weight: '500', size: 14 },
-                            color: '#52525b'
+                            font: { family: "'Geist', sans-serif", weight: '500', size: window.innerWidth < 480 ? 10 : 14 },
+                            color: '#52525b',
+                            usePointStyle: true,
+                            pointStyle: 'circle'
                         } 
+                    },
+                    tooltip: {
+                        enabled: false,
+                        position: 'nearest',
+                        external: externalTooltipHandler
                     }
                 }
             }
@@ -948,7 +1162,7 @@
      */
     function initialiseCanvas() {
         const viewport = document.getElementById('simulation-viewport');
-        const dpr = window.devicePixelRatio || 1;
+        const ratio = Math.min(window.devicePixelRatio || 1, 2);
 
         // Prevent collapse to 0 when viewport is hidden
         const viewportWidth = (viewport && viewport.clientWidth > 0) ? viewport.clientWidth : (state.width || window.innerWidth || 800);
@@ -971,17 +1185,17 @@
             state.spawnMaxX = state.width;
         }
 
-        // Scale buffer for Retina
-        canvas.width = viewportWidth * dpr;
-        canvas.height = viewportHeight * dpr;
+        // Scale buffer for Retina (capped at 2x for performance)
+        canvas.width = viewportWidth * ratio;
+        canvas.height = viewportHeight * ratio;
 
         // Lock visible size
         canvas.style.width = viewportWidth + 'px';
         canvas.style.height = viewportHeight + 'px';
 
-        ctx.scale(dpr, dpr);
+        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
 
-        console.log(`initialiseCanvas: Retina enabled (DPI: ${dpr}). Resolution: ${canvas.width}x${canvas.height}`);
+        console.log(`initialiseCanvas: DPI ratio capped at ${ratio}. Resolution: ${canvas.width}x${canvas.height}`);
 
         ctx.fillStyle = '#000000';
         ctx.fillRect(0, 0, state.width, state.height);
@@ -990,7 +1204,45 @@
      * Event listener for window resizing.
      */
     function handleResize() {
-        initialiseCanvas();
+        const viewport = document.getElementById('simulation-viewport');
+        const ratio = Math.min(window.devicePixelRatio || 1, 2);
+
+        // Prevent collapse to 0 when viewport is hidden
+        const viewportWidth = (viewport && viewport.clientWidth > 0) ? viewport.clientWidth : (state.width || window.innerWidth || 800);
+        const viewportHeight = (viewport && viewport.clientHeight > 0) ? viewport.clientHeight : (state.height || window.innerHeight || 500);
+
+        state.width = viewportWidth;
+        state.height = viewportHeight;
+
+        // Calculate spawn boundaries based on UI docks
+        const controlsDock = document.getElementById('live-controls-dock');
+        const hudDock = document.getElementById('live-hud');
+
+        if (window.innerWidth > 800 && controlsDock && hudDock) {
+            const controlsRect = controlsDock.getBoundingClientRect();
+            const hudRect = hudDock.getBoundingClientRect();
+            state.spawnMinX = controlsRect.right;
+            state.spawnMaxX = hudRect.left;
+        } else {
+            state.spawnMinX = 0;
+            state.spawnMaxX = state.width;
+        }
+
+        // Scale buffer for Retina (capped at 2x for performance)
+        canvas.width = viewportWidth * ratio;
+        canvas.height = viewportHeight * ratio;
+
+        // Lock visible size
+        canvas.style.width = viewportWidth + 'px';
+        canvas.style.height = viewportHeight + 'px';
+
+        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+
+        console.log(`handleResize: DPI ratio capped at ${ratio}. Resolution: ${canvas.width}x${canvas.height}`);
+
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, state.width, state.height);
+        
         // Force refresh on resize to avoid stretched visuals
         state.dashboard.dirty = true;
     }
@@ -1001,6 +1253,15 @@
     function updateState() {
         state.showAlpha = alphaToggle.checked;
         state.showBeta = betaToggle.checked;
+        state.audioEnabled = audioToggle.checked;
+        
+        // Resume audio context on interaction if needed
+        if (state.audioEnabled) {
+            Geiger.init();
+            if (Geiger.ctx && Geiger.ctx.state === 'suspended') {
+                Geiger.ctx.resume();
+            }
+        }
     }
 
     /**
@@ -1141,10 +1402,6 @@
      * Task 3: The Radon Spawner Engine.
      */
     function spawnParticles(timestamp) {
-        if (alphaCount >= 2500) {
-            return;
-        }
-
         if (!lastTime) {
             lastTime = timestamp;
             lastLogTime = timestamp;
@@ -1173,14 +1430,33 @@
                 // Task 2: Generate metadata BEFORE Particle instantiation
                 const metadata = generateMetadata(type, startX, startY);
                 particles.push(new Particle(startX, startY, type, metadata));
+                Geiger.playClick(type);
+                Haptics.pulse(type);
                 
                 // Synchronise Visuals with Data Generation
                 logParticleMetadata(type, startX, startY, metadata);
 
                 // Update verification counters
                 totalSpawned++;
-                if (type === 'alpha') alphaCount++;
-                else betaCount++;
+                if (type === 'alpha') {
+                    alphaCount++;
+                    lifetimeAlphaCount++;
+
+                    // Alert Pulse Warning (Task 4)
+                    if (lifetimeAlphaCount > 2300) {
+                        if (haltAlertPulse && !haltAlertPulse.classList.contains('active')) {
+                            haltAlertPulse.classList.add('active');
+                        }
+                    }
+
+                    if (lifetimeAlphaCount >= 2554) {
+                        state.halted = true;
+                        return; // Halt spawning immediately
+                    }
+                } else {
+                    betaCount++;
+                    lifetimeBetaCount++;
+                }
             }
         }
 
@@ -1215,6 +1491,30 @@
      * The main rendering loop.
      */
     function render(timestamp) {
+        if (state.halted) {
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Final dashboard update to capture full dataset
+            state.dashboard.dirty = true;
+            refreshDashboards();
+
+            // Populate final stats
+            document.getElementById('final-alpha-count').textContent = state.liveAlphaData.totalPushed;
+            document.getElementById('final-beta-count').textContent = state.liveBetaData.totalPushed;
+            document.getElementById('final-muon-count').textContent = state.liveMuonData.totalPushed;
+
+            if (state.activeView === 'live') {
+                document.getElementById('halt-overlay').style.display = 'block';
+            } else {
+                document.getElementById('halt-overlay').style.display = 'none';
+            }
+
+            document.getElementById('live-chamber-header').style.opacity = '0.3';
+            document.getElementById('live-chamber-header').style.pointerEvents = 'none';
+            return; // Kill the animation loop
+        }
+
         // Step 1: Update state from UI
         updateState();
 
@@ -1232,9 +1532,12 @@
             }
 
             // Update Live HUD
-            document.getElementById('hud-alpha-count').textContent = state.liveAlphaData.size;
-            document.getElementById('hud-beta-count').textContent = state.liveBetaData.size;
-            document.getElementById('hud-muon-count').textContent = state.liveMuonData.size;
+            if (timestamp - lastHUDUpdateTime > 100) {
+                document.getElementById('hud-alpha-count').textContent = state.liveAlphaData.totalPushed;
+                document.getElementById('hud-beta-count').textContent = state.liveBetaData.totalPushed;
+                document.getElementById('hud-muon-count').textContent = state.liveMuonData.totalPushed;
+                lastHUDUpdateTime = timestamp;
+            }
         } else {
             // Keep simulation physics ticking even if not drawing them
             for (let i = particles.length - 1; i >= 0; i--) {
@@ -1328,6 +1631,54 @@
     };
 
     /**
+     * Handle touch start event for swipe gestures.
+     */
+    function handleTouchStart(e) {
+        state.touchStartX = e.touches[0].clientX;
+    }
+
+    /**
+     * Handle touch end event for swipe gestures.
+     */
+    function handleTouchEnd(e) {
+        const touchEndX = e.changedTouches[0].clientX;
+        const deltaX = touchEndX - state.touchStartX;
+        handleSwipeGesture(deltaX);
+    }
+
+    /**
+     * Navigate between views with looping logic.
+     */
+    function navigateViews(offset) {
+        const views = ['live', 'morphology', 'energy', 'momentum'];
+        const currentIndex = views.indexOf(state.activeView);
+        
+        // Use modulo for looping
+        const nextIndex = (currentIndex + offset + views.length) % views.length;
+        const direction = offset > 0 ? 'next' : 'prev';
+
+        if (nextIndex !== currentIndex) {
+            vibrate(10);
+            switchView(views[nextIndex], direction);
+        }
+    }
+
+    /**
+     * Process swipe gesture and switch views.
+     */
+    function handleSwipeGesture(deltaX) {
+        const threshold = 50; // pixels
+        
+        if (deltaX < -threshold) {
+            // Swipe Left -> Next View
+            navigateViews(1);
+        } else if (deltaX > threshold) {
+            // Swipe Right -> Previous View
+            navigateViews(-1);
+        }
+    }
+
+    /**
      * Initialise the application.
      */
     function initialise() {
@@ -1335,12 +1686,23 @@
         initialiseCanvas();
         
         window.addEventListener('resize', handleResize);
+        window.addEventListener('touchstart', handleTouchStart, { passive: true });
+        window.addEventListener('touchend', handleTouchEnd, { passive: true });
+        
+        // UI Toggles
+        alphaToggle.addEventListener('change', updateState);
+        betaToggle.addEventListener('change', updateState);
+        audioToggle.addEventListener('change', updateState);
         
         // Navigation listeners
-        btnLive.addEventListener('click', () => switchView('live'));
-        btnMorphology.addEventListener('click', () => switchView('morphology'));
-        btnEnergy.addEventListener('click', () => switchView('energy'));
-        btnMomentum.addEventListener('click', () => switchView('momentum'));
+        if (btnPrev) btnPrev.addEventListener('click', () => {
+            btnPrev.blur();
+            navigateViews(-1);
+        });
+        if (btnNext) btnNext.addEventListener('click', () => {
+            btnNext.blur();
+            navigateViews(1);
+        });
         
         const bFieldToggleSim = document.getElementById('toggleBFieldSim');
         if(bFieldToggleSim) {
@@ -1366,6 +1728,10 @@
         // Start the render loop
         animationId = requestAnimationFrame(render);
         
+        // Initial Nav Theme Setup
+        const navArrows = document.querySelectorAll('.side-nav-arrow');
+        navArrows.forEach(btn => btn.classList.add('theme-dark'));
+
         console.log('Radon Cloud Chamber: Engine initialised.');
     }
 

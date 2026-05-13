@@ -14,6 +14,8 @@
     <script src="https://cdn.jsdelivr.net/npm/jstat@latest/dist/jstat.min.js"></script>
 </head>
 <body>
+    <div id="halt-alert-pulse"></div>
+    <!-- Live Chamber View -->
     <div id="live-chamber" class="view-container">
         <div id="live-chamber-header">
             <div id="live-controls-dock">
@@ -47,6 +49,16 @@
                             </div>
                         </label>
                     </div>
+                    <div class="dock-divider"></div>
+                    <div class="glass-toggle">
+                        <label class="glass-switch-label">
+                            <span class="glass-switch-text">Audio</span>
+                            <div class="glass-switch">
+                                <input type="checkbox" id="toggleAudio">
+                                <span class="glass-slider"></span>
+                            </div>
+                        </label>
+                    </div>
                 </div>
             </div>
 
@@ -76,6 +88,7 @@
         <div id="live-controls-dock-placeholder" style="display:none;"></div>
     </div>
 
+    <!-- Morphology View -->
     <div id="morphology-view" class="tab-view view-container">
         <div class="card">
             <div class="card-content">
@@ -102,6 +115,7 @@
         </div>
     </div>
 
+    <!-- Energy View -->
     <div id="energy-view" class="tab-view view-container">
         <div class="card">
             <div class="card-content">
@@ -119,6 +133,7 @@
         </div>
     </div>
 
+    <!-- Momentum View -->
     <div id="momentum-view" class="tab-view view-container">
         <div class="card">
             <div class="card-content">
@@ -136,24 +151,38 @@
         </div>
     </div>
 
-    <nav id="bottom-nav">
-        <button id="btn-live" class="nav-btn active" aria-label="Live Chamber">
-            <!-- Eye Icon -->
-            <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+    <!-- Global Halt Overlay (Centred on Screen) -->
+    <div id="halt-overlay" class="glass-panel" style="display: none;">
+        <div class="halt-content">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#00ffff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"></path><path d="m9 12 2 2 4-4"></path></svg>
+            <h1>Image Pipeline is complete</h1>
+            <div class="halt-stats">
+                <div class="stat-item">
+                    <span class="stat-value" id="final-alpha-count">0</span>
+                    <span class="stat-label">Alpha Particles</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value" id="final-beta-count">0</span>
+                    <span class="stat-label">Beta Particles</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value" id="final-muon-count">0</span>
+                    <span class="stat-label">Muon Events</span>
+                </div>
+            </div>
+            <button class="export-btn" onclick="location.reload()">RESTART ENGINE</button>
+        </div>
+    </div>
+
+    <!-- Side Navigation Arrows -->
+    <div id="side-nav">
+        <button id="nav-prev" class="side-nav-arrow prev" aria-label="Previous View">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
         </button>
-        <button id="btn-morphology" class="nav-btn" aria-label="Morphology">
-            <!-- Scatter Graph Icon -->
-            <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="17" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="17" cy="7" r="2"></circle><polyline points="3 21 21 21"></polyline><polyline points="3 3 3 21"></polyline></svg>
+        <button id="nav-next" class="side-nav-arrow next" aria-label="Next View">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
         </button>
-        <button id="btn-energy" class="nav-btn" aria-label="Energy">
-            <!-- Bar Chart Icon -->
-            <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line><line x1="3" y1="20" x2="21" y2="20"></line></svg>
-        </button>
-        <button id="btn-momentum" class="nav-btn" aria-label="Momentum">
-            <!-- Activity/Pulse Icon -->
-            <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
-        </button>
-    </nav>
+    </div>
 
     <script src="app.js"></script>
 </body>
