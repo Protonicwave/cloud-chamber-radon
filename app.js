@@ -131,7 +131,7 @@
             alpha: { meanX: 0, meanY: 0, sdX: 0, sdY: 0, sumX: 0, sumX2: 0, sumY: 0, sumY2: 0, count: 0 },
             beta: { meanX: 0, meanY: 0, sdX: 0, sdY: 0, sumX: 0, sumX2: 0, sumY: 0, sumY2: 0, count: 0 }
         },
-        playing: false,
+        playing: true,
         liveAlphaData: new RingBuffer(3000),
         liveBetaData: new RingBuffer(3000),
         liveMuonData: new RingBuffer(1000)
@@ -1729,19 +1729,9 @@
              });
         }
 
-        const startEngineBtn = document.getElementById('start-engine-btn');
         const toggleEngine = document.getElementById('toggleEngine');
-        const startOverlay = document.getElementById('start-overlay');
-
-        if (startEngineBtn) {
-            startEngineBtn.addEventListener('click', () => {
-                state.playing = true;
-                if (startOverlay) startOverlay.style.display = 'none';
-                if (toggleEngine) toggleEngine.checked = true;
-            });
-        }
-
         if (toggleEngine) {
+            toggleEngine.checked = true;
             toggleEngine.addEventListener('change', (e) => {
                 state.playing = e.target.checked;
             });
