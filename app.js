@@ -131,6 +131,7 @@
             alpha: { meanX: 0, meanY: 0, sdX: 0, sdY: 0, sumX: 0, sumX2: 0, sumY: 0, sumY2: 0, count: 0 },
             beta: { meanX: 0, meanY: 0, sdX: 0, sdY: 0, sumX: 0, sumX2: 0, sumY: 0, sumY2: 0, count: 0 }
         },
+        playing: false,
         liveAlphaData: new RingBuffer(3000),
         liveBetaData: new RingBuffer(3000),
         liveMuonData: new RingBuffer(1000)
@@ -247,28 +248,14 @@
         constructor(x, y, type, metadata) {
             this.x = x;
             this.y = y;
-            this.prevX = x;
-            this.prevY = y;
+            this.lastDrawX = x;
+            this.lastDrawY = y;
             this.type = type;
             this.active = true;
             this.distanceTravelled = 0;
             this.lastTrailDistance = 0;
 
-            // Task 4: PixiJS Sprite Initialization
-            this.sprite = new PIXI.Sprite(glowTexture);
-            this.sprite.anchor.set(0.5);
-            
-            if (this.type === 'alpha') this.sprite.tint = 0x0096c8;
-            else if (this.type === 'beta') this.sprite.tint = 0xa1a1aa;
-            else this.sprite.tint = 0x71717a;
-
-            this.sprite.x = x;
-            this.sprite.y = y;
-
-            if (particleContainer) {
-                particleContainer.addChild(this.sprite);
-            }
-
+            // Task 4: Vector Initialization (Head sprite removed)
             if (this.type === 'beta') {
                 this.dashPattern = [2, 2];
             }
@@ -328,10 +315,6 @@
                 return;
             }
 
-            // Save previous position for line drawing
-            this.prevX = this.x;
-            this.prevY = this.y;
-
             // Trajectory updates
             if (this.type === 'beta') {
                 const progress = this.distanceTravelled / this.lifespan;
@@ -364,37 +347,38 @@
 
             this.distanceTravelled += currentSpeed;
 
-            // Task 4: Sync PixiJS sprite position
-            this.sprite.x = this.x;
-            this.sprite.y = this.y;
-
-            // Task 5: Spawn Trail Sprites
-            // For Bragg Peak: Increase trail density and size near the end of Alpha tracks
-            const trailThreshold = (this.type === 'alpha' && progress > 0.9) ? 1.5 : 4;
+            // Task 5: Spawn Trail Graphics (Vector Implementation)
+            // For Bragg Peak: Increase trail density near the end of Alpha tracks
+            const trailThreshold = (this.type === 'alpha' && progress > 0.9) ? 1.0 : (this.type === 'alpha' ? 2.5 : 4);
 
             if (this.distanceTravelled - this.lastTrailDistance > trailThreshold) {
                 this.lastTrailDistance = this.distanceTravelled;
-                const trailSprite = new PIXI.Sprite(glowTexture);
-                trailSprite.anchor.set(0.5);
-                trailSprite.tint = this.sprite.tint;
-                trailSprite.x = this.x;
-                trailSprite.y = this.y;
                 
-                // Scale trail based on particle type
-                let baseScale = this.type === 'alpha' ? 0.8 : 0.4;
+                const segment = new PIXI.Graphics();
                 
-                // Bragg Peak: Thicker trail at end of Alpha tracks
+                // Map colors: Alpha -> 0x0096c8, Beta -> 0xa1a1aa, Muon -> 0x71717a
+                let segmentColor = 0x71717a;
+                if (this.type === 'alpha') segmentColor = 0x0096c8;
+                else if (this.type === 'beta') segmentColor = 0xa1a1aa;
+                
+                // Map width: Alpha thicker, especially at Bragg Peak
+                let baseWidth = (this.type === 'alpha') ? 3 : 1.5;
                 if (this.type === 'alpha' && progress > 0.9) {
-                    baseScale *= 1.5;
+                    baseWidth *= 1.8;
                 }
                 
-                trailSprite.scale.set(baseScale + Math.random() * 0.2);
+                segment.moveTo(this.lastDrawX, this.lastDrawY)
+                       .lineTo(this.x, this.y)
+                       .stroke({ color: segmentColor, width: baseWidth, cap: 'round' });
+                
+                this.lastDrawX = this.x;
+                this.lastDrawY = this.y;
                 
                 const initialAlpha = this.type === 'muon' ? 0.15 : 0.4;
-                state.trails.push({ sprite: trailSprite, alpha: initialAlpha });
+                state.trails.push({ graphics: segment, alpha: initialAlpha });
                 
                 if (particleContainer) {
-                    particleContainer.addChild(trailSprite);
+                    particleContainer.addChild(segment);
                 }
             }
             if (this.distanceTravelled >= this.lifespan) {
@@ -406,9 +390,7 @@
          * Clean up PixiJS resources.
          */
         destroy() {
-            if (this.sprite) {
-                this.sprite.destroy();
-            }
+            // No sprite to destroy; graphics segments cleaned up by render loop.
         }
     }
 
@@ -1523,51 +1505,58 @@
         // Step 1: Update state from UI
         updateState();
 
-        // Step 2: Spawn particles unconditionally
-        spawnParticles(timestamp);
+        if (state.playing) {
+            // Step 2: Spawn particles
+            spawnParticles(timestamp);
 
-        if (state.activeView === 'live') {
-            // Live Chamber rendering
-            
-            // Task 5: Trail Dissipation System
+            // Task 5: Trail Dissipation System - Run only when playing to "freeze" visuals
             for (let i = state.trails.length - 1; i >= 0; i--) {
                 const trail = state.trails[i];
                 trail.alpha -= 0.008; // Control dissipation speed
                 if (trail.alpha <= 0) {
-                    trail.sprite.destroy();
+                    trail.graphics.destroy();
                     state.trails.splice(i, 1);
                 } else {
-                    trail.sprite.alpha = trail.alpha;
+                    trail.graphics.alpha = trail.alpha;
                 }
             }
 
-            for (let i = particles.length - 1; i >= 0; i--) {
-                const particle = particles[i];
-                particle.update();
-                // Task 5: particle.draw(pixiApp);
-                if (!particle.active) {
-                    particle.destroy();
-                    particles.splice(i, 1);
-                }
-            }
+            if (state.activeView === 'live') {
+                // Live Chamber rendering
 
-            // Update Live HUD
-            if (timestamp - lastHUDUpdateTime > 100) {
-                document.getElementById('hud-alpha-count').textContent = state.liveAlphaData.totalPushed;
-                document.getElementById('hud-beta-count').textContent = state.liveBetaData.totalPushed;
-                document.getElementById('hud-muon-count').textContent = state.liveMuonData.totalPushed;
-                lastHUDUpdateTime = timestamp;
+                for (let i = particles.length - 1; i >= 0; i--) {
+                    const particle = particles[i];
+                    particle.update();
+                    // Task 5: particle.draw(pixiApp);
+                    if (!particle.active) {
+                        particle.destroy();
+                        particles.splice(i, 1);
+                    }
+                }
+
+                // Update Live HUD
+                if (timestamp - lastHUDUpdateTime > 100) {
+                    document.getElementById('hud-alpha-count').textContent = state.liveAlphaData.totalPushed;
+                    document.getElementById('hud-beta-count').textContent = state.liveBetaData.totalPushed;
+                    document.getElementById('hud-muon-count').textContent = state.liveMuonData.totalPushed;
+                    lastHUDUpdateTime = timestamp;
+                }
+            } else {
+                // Keep simulation physics ticking even if not drawing them
+                for (let i = particles.length - 1; i >= 0; i--) {
+                    const particle = particles[i];
+                    particle.update();
+                    if (!particle.active) {
+                        particle.destroy();
+                        particles.splice(i, 1);
+                    }
+                }
             }
         } else {
-            // Keep simulation physics ticking even if not drawing them
-            for (let i = particles.length - 1; i >= 0; i--) {
-                const particle = particles[i];
-                particle.update();
-                if (!particle.active) {
-                    particle.destroy();
-                    particles.splice(i, 1);
-                }
-            }
+            // Freeze simulation but keep clock updated to avoid burst on resume
+            lastTime = timestamp;
+            lastLogTime = timestamp;
+            lastHUDUpdateTime = timestamp;
         }
 
         animationId = requestAnimationFrame(render);
@@ -1738,6 +1727,24 @@
              bFieldToggleScatter.addEventListener('change', (e) => {
                  window.setScatterMag(e.target.checked);
              });
+        }
+
+        const startEngineBtn = document.getElementById('start-engine-btn');
+        const toggleEngine = document.getElementById('toggleEngine');
+        const startOverlay = document.getElementById('start-overlay');
+
+        if (startEngineBtn) {
+            startEngineBtn.addEventListener('click', () => {
+                state.playing = true;
+                if (startOverlay) startOverlay.style.display = 'none';
+                if (toggleEngine) toggleEngine.checked = true;
+            });
+        }
+
+        if (toggleEngine) {
+            toggleEngine.addEventListener('change', (e) => {
+                state.playing = e.target.checked;
+            });
         }
         
         // Throttled dashboard updates

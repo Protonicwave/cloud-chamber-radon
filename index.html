@@ -52,6 +52,16 @@
                         </label>
                     </div>
                     <div class="dock-divider"></div>
+                    <div class="glass-toggle">
+                        <label class="glass-switch-label">
+                            <span class="glass-switch-text">Engine</span>
+                            <div class="glass-switch">
+                                <input type="checkbox" id="toggleEngine">
+                                <span class="glass-slider"></span>
+                            </div>
+                        </label>
+                    </div>
+                    <div class="dock-divider"></div>
                 </div>
             </div>
 
@@ -144,11 +154,21 @@
         </div>
     </div>
 
+    <!-- Global Start Overlay -->
+    <div id="start-overlay" class="glass-panel">
+        <div class="start-content">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#00ffff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            <h1>SYSTEM STANDBY</h1>
+            <p>Radon-222 decay simulation initialized.</p>
+            <button class="export-btn" id="start-engine-btn">[ INITIALIZE CHAMBER ]</button>
+        </div>
+    </div>
+
     <!-- Global Halt Overlay (Centred on Screen) -->
     <div id="halt-overlay" class="glass-panel" style="display: none;">
         <div class="halt-content">
             <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#00ffff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"></path><path d="m9 12 2 2 4-4"></path></svg>
-            <h1>Image Pipeline is complete</h1>
+            <h1>IMAGE PROCESSING FINISHED</h1>
             <div class="halt-stats">
                 <div class="stat-item">
                     <span class="stat-value" id="final-alpha-count">0</span>
@@ -163,7 +183,7 @@
                     <span class="stat-label">Muon Events</span>
                 </div>
             </div>
-            <button class="export-btn" onclick="location.reload()">RESTART ENGINE</button>
+            <button class="export-btn" onclick="location.reload()">[ RESTART ENGINE ]</button>
         </div>
     </div>
 
