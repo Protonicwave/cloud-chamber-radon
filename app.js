@@ -19,17 +19,22 @@
     };
 
     // --- Configuration & Constants ---
-    const FADE_COLOUR = 'rgba(0, 0, 0, 0.05)';
+    // Patch for legacy filters in PixiJS v8
+    if (typeof PIXI !== 'undefined') {
+        PIXI.settings = PIXI.settings || {};
+        PIXI.settings.FILTER_RESOLUTION = 1;
+    }
     const MASS_ALPHA = 3727;
     const MASS_BETA = 0.511;
     const MASS_MUON = 105.6;
 
     // --- DOM Elements ---
     const canvas = document.getElementById('chamberCanvas');
-    const ctx = canvas.getContext('2d');
+    let pixiApp = null;
+    let particleContainer = null;
+    let glowTexture = null;
     const alphaToggle = document.getElementById('showAlpha');
     const betaToggle = document.getElementById('showBeta');
-    const audioToggle = document.getElementById('toggleAudio');
     
     // View switching elements
     const liveView = document.getElementById('live-chamber');
@@ -97,7 +102,7 @@
         magneticField: false,
         showAlpha: alphaToggle.checked,
         showBeta: betaToggle.checked,
-        audioEnabled: audioToggle.checked,
+        audioEnabled: false,
         glowEnabled: true,
         halted: false,
         width: 0,
@@ -107,6 +112,7 @@
         activeView: 'live', // 'live', 'morphology', or 'energy'
         isTransitioning: false,
         touchStartX: 0,
+        trails: [],
         buffers: {
             density: null,
             densityCtx: null,
@@ -246,6 +252,23 @@
             this.type = type;
             this.active = true;
             this.distanceTravelled = 0;
+            this.lastTrailDistance = 0;
+
+            // Task 4: PixiJS Sprite Initialization
+            this.sprite = new PIXI.Sprite(glowTexture);
+            this.sprite.anchor.set(0.5);
+            
+            if (this.type === 'alpha') this.sprite.tint = 0x0096c8;
+            else if (this.type === 'beta') this.sprite.tint = 0xa1a1aa;
+            else this.sprite.tint = 0x71717a;
+
+            this.sprite.x = x;
+            this.sprite.y = y;
+
+            if (particleContainer) {
+                particleContainer.addChild(this.sprite);
+            }
+
             if (this.type === 'beta') {
                 this.dashPattern = [2, 2];
             }
@@ -323,74 +346,71 @@
             }
 
             // Move particle
-            this.x += Math.cos(this.angle) * this.speed;
-            this.y += Math.sin(this.angle) * this.speed;
+            const progress = this.distanceTravelled / this.lifespan;
+            let currentSpeed = this.speed;
+            
+            // Task 8: Physics Accuracy (Bragg Curve)
+            // Particles (especially Alphas) lose energy and slow down more rapidly at the end
+            if (this.type === 'alpha' || this.type === 'beta') {
+                if (progress > 0.8) {
+                    // Decelerate near end
+                    currentSpeed *= (1 - (progress - 0.8) * 4);
+                    currentSpeed = Math.max(currentSpeed, 0.2);
+                }
+            }
 
-            this.distanceTravelled += this.speed;
+            this.x += Math.cos(this.angle) * currentSpeed;
+            this.y += Math.sin(this.angle) * currentSpeed;
 
+            this.distanceTravelled += currentSpeed;
+
+            // Task 4: Sync PixiJS sprite position
+            this.sprite.x = this.x;
+            this.sprite.y = this.y;
+
+            // Task 5: Spawn Trail Sprites
+            // For Bragg Peak: Increase trail density and size near the end of Alpha tracks
+            const trailThreshold = (this.type === 'alpha' && progress > 0.9) ? 1.5 : 4;
+
+            if (this.distanceTravelled - this.lastTrailDistance > trailThreshold) {
+                this.lastTrailDistance = this.distanceTravelled;
+                const trailSprite = new PIXI.Sprite(glowTexture);
+                trailSprite.anchor.set(0.5);
+                trailSprite.tint = this.sprite.tint;
+                trailSprite.x = this.x;
+                trailSprite.y = this.y;
+                
+                // Scale trail based on particle type
+                let baseScale = this.type === 'alpha' ? 0.8 : 0.4;
+                
+                // Bragg Peak: Thicker trail at end of Alpha tracks
+                if (this.type === 'alpha' && progress > 0.9) {
+                    baseScale *= 1.5;
+                }
+                
+                trailSprite.scale.set(baseScale + Math.random() * 0.2);
+                
+                const initialAlpha = this.type === 'muon' ? 0.15 : 0.4;
+                state.trails.push({ sprite: trailSprite, alpha: initialAlpha });
+                
+                if (particleContainer) {
+                    particleContainer.addChild(trailSprite);
+                }
+            }
             if (this.distanceTravelled >= this.lifespan) {
                 this.active = false;
             }
         }
 
-        drawVector(ctx) {
-            const headSize = 4;
-            const angle = this.angle;
-            ctx.beginPath();
-            ctx.moveTo(this.x, this.y);
-            ctx.lineTo(this.x - headSize * Math.cos(angle - Math.PI/6), this.y - headSize * Math.sin(angle - Math.PI/6));
-            ctx.moveTo(this.x, this.y);
-            ctx.lineTo(this.x - headSize * Math.cos(angle + Math.PI/6), this.y - headSize * Math.sin(angle + Math.PI/6));
-            
-            if (this.type === 'alpha') ctx.strokeStyle = '#0096c8';
-            else if (this.type === 'beta') ctx.strokeStyle = '#a1a1aa';
-            else ctx.strokeStyle = '#71717a';
-            
-            ctx.lineWidth = 1;
-            ctx.stroke();
-        }
-
         /**
-         * Draw the particle track segment using a Schematic technique.
+         * Clean up PixiJS resources.
          */
-        draw(ctx) {
-            if (!this.active) return;
-
-            ctx.save();
-
-            if (state.glowEnabled) {
-                if (this.type === 'alpha') {
-                    ctx.shadowBlur = 15;
-                    ctx.shadowColor = '#00ffff';
-                } else if (this.type === 'beta') {
-                    ctx.shadowBlur = 8;
-                    ctx.shadowColor = '#a1a1aa';
-                }
+        destroy() {
+            if (this.sprite) {
+                this.sprite.destroy();
             }
-
-            ctx.beginPath();
-
-            // Draw current segment
-            ctx.moveTo(this.prevX, this.prevY);
-            ctx.lineTo(this.x, this.y);
-
-            if (this.type === 'alpha') {
-                ctx.strokeStyle = '#0096c8';
-                ctx.lineWidth = 2.5;
-            } else if (this.type === 'beta') {
-                ctx.strokeStyle = '#a1a1aa';
-                ctx.lineWidth = 1.0;
-                ctx.setLineDash(this.dashPattern || [2, 2]);
-            } else {
-                ctx.strokeStyle = '#71717a';
-                ctx.lineWidth = 1.0;
-            }
-
-            ctx.stroke();
-            ctx.restore();
-
-            this.drawVector(ctx);
-        }    }
+        }
+    }
 
     /**
      * Toggle the magnetic field simulation for the scatter chart.
@@ -600,7 +620,7 @@
         }
 
         // 3. Middle of transition: Swap displays
-        setTimeout(() => {
+        setTimeout(async () => {
             // 2. Update state - delayed until physical swap to keep old view rendering
             state.activeView = view;
 
@@ -623,7 +643,7 @@
 
                 // Trigger layout-heavy updates immediately after display: block to prevent snaps
                 if (view === 'live') {
-                    initialiseCanvas();
+                    await initialiseCanvas();
                 } else if (view === 'morphology') {
                     if (!state.charts.scatter) renderScatter();
                     else state.charts.scatter.resize();
@@ -1158,9 +1178,30 @@
     }
 
     /**
-     * Initialise the canvas dimensions to match the viewport.
+     * Create a glowing radial gradient texture for particles.
      */
-    function initialiseCanvas() {
+    function createGlowTexture(app) {
+        const size = 32;
+        const radius = size / 2;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        
+        const grad = ctx.createRadialGradient(radius, radius, 0, radius, radius, radius);
+        grad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+        grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, size, size);
+        
+        return PIXI.Texture.from(canvas);
+    }
+
+    /**
+     * Initialise the PixiJS application and canvas dimensions.
+     */
+    async function initialiseCanvas() {
         const viewport = document.getElementById('simulation-viewport');
         const ratio = Math.min(window.devicePixelRatio || 1, 2);
 
@@ -1170,6 +1211,43 @@
 
         state.width = viewportWidth;
         state.height = viewportHeight;
+
+        if (!pixiApp) {
+            pixiApp = new PIXI.Application();
+            await pixiApp.init({
+                canvas: canvas,
+                width: viewportWidth,
+                height: viewportHeight,
+                resolution: ratio,
+                autoDensity: true,
+                background: 0x000000,
+                antialias: true,
+                clearBeforeRender: true
+            });
+            glowTexture = createGlowTexture(pixiApp);
+
+            // Using standard Container because v8 ParticleContainer requires a different Particle API
+            particleContainer = new PIXI.Container();
+            
+            // Add Cinematic Bloom (Task 7: Visuals)
+            const filterWrapper = new PIXI.Container();
+            
+            if (PIXI.filters && PIXI.filters.AdvancedBloomFilter) {
+                const bloomFilter = new PIXI.filters.AdvancedBloomFilter({
+                    threshold: 0.4,
+                    bloomScale: 1.5,
+                    brightness: 1.2,
+                    blur: 6,
+                    quality: 3
+                });
+                filterWrapper.filters = [bloomFilter];
+            }
+            
+            filterWrapper.addChild(particleContainer);
+            pixiApp.stage.addChild(filterWrapper);
+        } else {
+            pixiApp.renderer.resize(viewportWidth, viewportHeight);
+        }
 
         // Calculate spawn boundaries based on UI docks
         const controlsDock = document.getElementById('live-controls-dock');
@@ -1185,64 +1263,13 @@
             state.spawnMaxX = state.width;
         }
 
-        // Scale buffer for Retina (capped at 2x for performance)
-        canvas.width = viewportWidth * ratio;
-        canvas.height = viewportHeight * ratio;
-
-        // Lock visible size
-        canvas.style.width = viewportWidth + 'px';
-        canvas.style.height = viewportHeight + 'px';
-
-        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-
-        console.log(`initialiseCanvas: DPI ratio capped at ${ratio}. Resolution: ${canvas.width}x${canvas.height}`);
-
-        ctx.fillStyle = '#000000';
-        ctx.fillRect(0, 0, state.width, state.height);
+        console.log(`initialiseCanvas: PIXI.Application initialised. Resolution: ${viewportWidth}x${viewportHeight} @ ${ratio}x`);
     }
     /**
      * Event listener for window resizing.
      */
-    function handleResize() {
-        const viewport = document.getElementById('simulation-viewport');
-        const ratio = Math.min(window.devicePixelRatio || 1, 2);
-
-        // Prevent collapse to 0 when viewport is hidden
-        const viewportWidth = (viewport && viewport.clientWidth > 0) ? viewport.clientWidth : (state.width || window.innerWidth || 800);
-        const viewportHeight = (viewport && viewport.clientHeight > 0) ? viewport.clientHeight : (state.height || window.innerHeight || 500);
-
-        state.width = viewportWidth;
-        state.height = viewportHeight;
-
-        // Calculate spawn boundaries based on UI docks
-        const controlsDock = document.getElementById('live-controls-dock');
-        const hudDock = document.getElementById('live-hud');
-
-        if (window.innerWidth > 800 && controlsDock && hudDock) {
-            const controlsRect = controlsDock.getBoundingClientRect();
-            const hudRect = hudDock.getBoundingClientRect();
-            state.spawnMinX = controlsRect.right;
-            state.spawnMaxX = hudRect.left;
-        } else {
-            state.spawnMinX = 0;
-            state.spawnMaxX = state.width;
-        }
-
-        // Scale buffer for Retina (capped at 2x for performance)
-        canvas.width = viewportWidth * ratio;
-        canvas.height = viewportHeight * ratio;
-
-        // Lock visible size
-        canvas.style.width = viewportWidth + 'px';
-        canvas.style.height = viewportHeight + 'px';
-
-        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-
-        console.log(`handleResize: DPI ratio capped at ${ratio}. Resolution: ${canvas.width}x${canvas.height}`);
-
-        ctx.fillStyle = '#000000';
-        ctx.fillRect(0, 0, state.width, state.height);
-        
+    async function handleResize() {
+        await initialiseCanvas();
         // Force refresh on resize to avoid stretched visuals
         state.dashboard.dirty = true;
     }
@@ -1253,29 +1280,10 @@
     function updateState() {
         state.showAlpha = alphaToggle.checked;
         state.showBeta = betaToggle.checked;
-        state.audioEnabled = audioToggle.checked;
-        
-        // Resume audio context on interaction if needed
-        if (state.audioEnabled) {
-            Geiger.init();
-            if (Geiger.ctx && Geiger.ctx.state === 'suspended') {
-                Geiger.ctx.resume();
-            }
-        }
     }
 
     /**
-     * Apply the vapour dissipation effect by drawing a semi-transparent 
-     * black rectangle over the entire canvas.
-     */
-    function applyDissipation() {
-        ctx.fillStyle = FADE_COLOUR;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-    }
-
-    /**
-     * Records particle metadata for analytics using jStat distributions.
-     * Incremental updates for O(1) performance.
+     * Records particle metadata for analytics using jStat distributions.     * Incremental updates for O(1) performance.
      * @param {string} type - 'alpha' or 'beta'
      * @param {number} startX - Origin X coordinate
      * @param {number} startY - Origin Y coordinate
@@ -1492,9 +1500,6 @@
      */
     function render(timestamp) {
         if (state.halted) {
-            ctx.fillStyle = '#000000';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
             // Final dashboard update to capture full dataset
             state.dashboard.dirty = true;
             refreshDashboards();
@@ -1523,12 +1528,27 @@
 
         if (state.activeView === 'live') {
             // Live Chamber rendering
-            applyDissipation();
+            
+            // Task 5: Trail Dissipation System
+            for (let i = state.trails.length - 1; i >= 0; i--) {
+                const trail = state.trails[i];
+                trail.alpha -= 0.008; // Control dissipation speed
+                if (trail.alpha <= 0) {
+                    trail.sprite.destroy();
+                    state.trails.splice(i, 1);
+                } else {
+                    trail.sprite.alpha = trail.alpha;
+                }
+            }
+
             for (let i = particles.length - 1; i >= 0; i--) {
                 const particle = particles[i];
                 particle.update();
-                particle.draw(ctx);
-                if (!particle.active) particles.splice(i, 1);
+                // Task 5: particle.draw(pixiApp);
+                if (!particle.active) {
+                    particle.destroy();
+                    particles.splice(i, 1);
+                }
             }
 
             // Update Live HUD
@@ -1543,7 +1563,10 @@
             for (let i = particles.length - 1; i >= 0; i--) {
                 const particle = particles[i];
                 particle.update();
-                if (!particle.active) particles.splice(i, 1);
+                if (!particle.active) {
+                    particle.destroy();
+                    particles.splice(i, 1);
+                }
             }
         }
 
@@ -1681,9 +1704,9 @@
     /**
      * Initialise the application.
      */
-    function initialise() {
+    async function initialise() {
         Chart.defaults.font.family = "'Geist', sans-serif";
-        initialiseCanvas();
+        await initialiseCanvas();
         
         window.addEventListener('resize', handleResize);
         window.addEventListener('touchstart', handleTouchStart, { passive: true });
@@ -1692,7 +1715,6 @@
         // UI Toggles
         alphaToggle.addEventListener('change', updateState);
         betaToggle.addEventListener('change', updateState);
-        audioToggle.addEventListener('change', updateState);
         
         // Navigation listeners
         if (btnPrev) btnPrev.addEventListener('click', () => {
@@ -1736,6 +1758,8 @@
     }
 
     // Launch the application
-    initialise();
+    initialise().catch(err => {
+        console.error('Initialisation failed:', err);
+    });
 
 })();
