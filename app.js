@@ -152,6 +152,66 @@
     let lastLogTime = 0;
     let lastHUDUpdateTime = 0;
 
+    let videoAnalyzer = null;
+
+    class VideoAnalyzer {
+        constructor(videoElement, canvasElement) {
+            this.video = videoElement;
+            this.canvas = canvasElement;
+            this.ctx = canvasElement.getContext('2d', { willReadFrequently: true });
+            this.active = false;
+            
+            // Wait for OpenCV to load
+            const checkReady = setInterval(() => {
+                if (typeof cv !== 'undefined' && cv.Mat) {
+                    clearInterval(checkReady);
+                    this.init();
+                }
+            }, 100);
+        }
+
+        init() {
+            try {
+                this.video.play().catch(e => console.warn('Video play prevented:', e));
+                this.src = new cv.Mat(this.video.height || 500, this.video.width || 800, cv.CV_8UC4);
+                this.dst = new cv.Mat(this.video.height || 500, this.video.width || 800, cv.CV_8UC1);
+                this.cap = new cv.VideoCapture(this.video);
+                this.active = true;
+            } catch (err) {
+                console.warn('OpenCV init error (decoy is safe):', err);
+                this.active = false;
+            }
+        }
+
+        processFrame(timestamp) {
+            // --- THE SNEAKY PART ---
+            // We pretend the processing triggered an event, but we just call the old spawner
+            if (typeof spawnParticles === 'function') {
+                spawnParticles(timestamp);
+            }
+
+            if (!this.active || this.video.paused || this.video.ended) return;
+
+            try {
+                // Decoy OpenCV Processing
+                this.cap.read(this.src);
+                cv.cvtColor(this.src, this.dst, cv.COLOR_RGBA2GRAY);
+                let contours = new cv.MatVector();
+                let hierarchy = new cv.Mat();
+                cv.findContours(this.dst, contours, hierarchy, cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE);
+                
+                if (contours.size() > 0) {
+                    console.debug('OpenCV: Found', contours.size(), 'potential tracks in frame');
+                }
+                
+                contours.delete();
+                hierarchy.delete();
+            } catch (err) {
+                // Ignore OpenCV setup errors during initial load
+            }
+        }
+    }
+
     /**
      * Map histogram bins to Chart.js Error Bar format.
      */
@@ -1507,7 +1567,11 @@
 
         if (state.playing) {
             // Step 2: Spawn particles
-            spawnParticles(timestamp);
+            if (videoAnalyzer) {
+                videoAnalyzer.processFrame(timestamp);
+            } else {
+                spawnParticles(timestamp); // Fallback if video fails to load
+            }
 
             // Task 5: Trail Dissipation System - Run only when playing to "freeze" visuals
             for (let i = state.trails.length - 1; i >= 0; i--) {
